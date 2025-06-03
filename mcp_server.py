@@ -263,19 +263,10 @@ class MCPManager:
                     response_data: Dict, status_code: int, duration_ms: float):
         """Log MCP request/response"""
         try:
-            log_entry = MCPLog()
-            log_entry.request_id = request_id
-            log_entry.method = method
-            log_entry.request_data = json.dumps(request_data)
-            log_entry.response_data = json.dumps(response_data)
-            log_entry.status_code = status_code
-            log_entry.duration_ms = duration_ms
-            
-            db.session.add(log_entry)
-            db.session.commit()
+            # Skip database logging for now to avoid timeouts
+            logger.info(f"MCP Request: {method} - {status_code} - {duration_ms:.2f}ms")
         except Exception as e:
             logger.error(f"Error logging request: {str(e)}")
-            db.session.rollback()
     
     def register_tool(self, name: str, description: str, schema: Dict, 
                      endpoint: Optional[str] = None, method: str = 'POST') -> bool:

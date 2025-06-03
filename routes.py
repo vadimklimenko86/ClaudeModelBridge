@@ -48,7 +48,9 @@ def mcp_endpoint():
         if not request_data:
             return jsonify({'error': {'code': -32700, 'message': 'Parse error'}}), 400
         
+        logger.info(f"MCP Request received: {request_data.get('method', 'unknown')}")
         response = mcp_manager.handle_mcp_request(request_data)
+        logger.info(f"MCP Response ready: {response.get('error', {}).get('code', 'success')}")
         return jsonify(response)
     
     except Exception as e:
