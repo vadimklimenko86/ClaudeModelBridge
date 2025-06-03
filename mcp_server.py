@@ -46,7 +46,7 @@ class MCPManager:
         start_time = time.time()
         
         try:
-            method = request_data.get('method')
+            method = request_data.get('method', '')
             params = request_data.get('params', {})
             
             logger.debug(f"Handling MCP request: {method}")
@@ -94,7 +94,8 @@ class MCPManager:
                     'message': f'Internal error: {str(e)}'
                 }
             }
-            self._log_request(request_id, method, request_data, error_response, 500, duration_ms)
+            method_str = request_data.get('method', 'unknown') if 'method' in locals() else 'unknown'
+            self._log_request(request_id, method_str, request_data, error_response, 500, duration_ms)
             return error_response
     
     def _handle_initialize(self, params: Dict) -> Dict:
@@ -229,6 +230,32 @@ class MCPManager:
                 'python_version': platform.python_version(),
                 'timestamp': datetime.utcnow().isoformat()
             }
+        elif tool_name == 'calculator':
+            expression = arguments.get('expression', '')
+            try:
+                # Simple safe math evaluation for basic operations only
+                # Replace dangerous functions and limit to basic math
+                safe_expression = expression.replace('^', '**')
+                allowed_chars = set('0123456789+-*/.() ')
+                if all(c in allowed_chars for c in safe_expression):
+                    result = eval(safe_expression)
+                    return {
+                        'expression': expression,
+                        'result': result,
+                        'type': type(result).__name__
+                    }
+                else:
+                    return {
+                        'expression': expression,
+                        'error': 'Only basic math operations (+, -, *, /, parentheses) are allowed',
+                        'result': None
+                    }
+            except Exception as e:
+                return {
+                    'expression': expression,
+                    'error': f"Calculation error: {str(e)}",
+                    'result': None
+                }
         else:
             raise Exception(f"Unknown built-in tool: {tool_name}")
     
@@ -272,6 +299,60 @@ class MCPManager:
             db.session.rollback()
             return False
     
+    def create_default_tools(self):
+        """Create default demonstration tools if none exist"""
+        if Tool.query.count() == 0:
+            logger.info("Creating default demonstration tools...")
+            
+            # Echo tool
+            echo_tool = Tool(
+                name='echo',
+                description='Echo back the input message',
+                schema=json.dumps({
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "description": "Message to echo back"
+                        }
+                    },
+                    "required": ["message"]
+                })
+            )
+            
+            # System info tool
+            system_info_tool = Tool(
+                name='system_info',
+                description='Get system information',
+                schema=json.dumps({
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                })
+            )
+            
+            # Calculator tool
+            calculator_tool = Tool(
+                name='calculator',
+                description='Perform basic mathematical calculations',
+                schema=json.dumps({
+                    "type": "object",
+                    "properties": {
+                        "expression": {
+                            "type": "string",
+                            "description": "Mathematical expression to evaluate (e.g., '2 + 3 * 4')"
+                        }
+                    },
+                    "required": ["expression"]
+                })
+            )
+            
+            db.session.add_all([echo_tool, system_info_tool, calculator_tool])
+            db.session.commit()
+            
+            # Reload tools after creation
+            self.load_tools()
+
     def get_stats(self) -> Dict:
         """Get MCP server statistics"""
         recent_logs = MCPLog.query.order_by(MCPLog.timestamp.desc()).limit(100).all()

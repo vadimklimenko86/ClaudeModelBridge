@@ -35,17 +35,30 @@ class ThemeManager {
         const toggleBtn = document.getElementById('themeToggle');
         if (toggleBtn) {
             const icon = toggleBtn.querySelector('[data-feather]');
-            const text = toggleBtn.querySelector('span') || toggleBtn.childNodes[2];
+            const textNodes = toggleBtn.childNodes;
+            let textNode = null;
             
-            if (this.theme === 'dark') {
-                icon.setAttribute('data-feather', 'sun');
-                if (text) text.textContent = ' Light Mode';
-            } else {
-                icon.setAttribute('data-feather', 'moon');
-                if (text) text.textContent = ' Dark Mode';
+            // Find text node
+            for (let node of textNodes) {
+                if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+                    textNode = node;
+                    break;
+                }
             }
             
-            feather.replace();
+            if (icon) {
+                if (this.theme === 'dark') {
+                    icon.setAttribute('data-feather', 'sun');
+                    if (textNode) textNode.textContent = 'Light Mode';
+                } else {
+                    icon.setAttribute('data-feather', 'moon');
+                    if (textNode) textNode.textContent = 'Dark Mode';
+                }
+                
+                if (typeof feather !== 'undefined') {
+                    feather.replace();
+                }
+            }
         }
     }
     
