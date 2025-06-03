@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+
+{% block title %}Logs - Flask MCP Server{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3 mb-0">Request Logs</h1>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-danger btn-sm" onclick="clearLogs()">
+                    <i data-feather="trash-2" class="me-1"></i>Clear Logs
+                </button>
+                <button class="btn btn-outline-primary btn-sm" onclick="refreshLogs()">
+                    <i data-feather="refresh-cw" class="me-1"></i>Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-3">
+                        <label class="form-label">Method Filter</label>
+                        <select class="form-select" id="methodFilter" onchange="filterLogs()">
+                            <option value="">All Methods</option>
+                            <option value="initialize">initialize</option>
+                            <option value="tools/list">tools/list</option>
+                            <option value="tools/call">tools/call</option>
+                            <option value="resources/list">resources/list</option>
+                            <option value="resources/read">resources/read</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Status Filter</label>
+                        <select class="form-select" id="statusFilter" onchange="filterLogs()">
+                            <option value="">All Status</option>
+                            <option value="success">Success (2xx)</option>
+                            <option value="error">Error (4xx-5xx)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Search</label>
+                        <input type="text" class="form-control" id="searchInput" 
+                               placeholder="Search request ID, method..." onkeyup="filterLogs()">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">&nbsp;</label>
+                        <button class="btn btn-outline-secondary w-100" onclick="clearFilters()">
+                            <i data-feather="x" class="me-1"></i>Clear
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Logs Table -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i data-feather="file-text" class="me-2"></i>
+                    Request History
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                {% if logs.items %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="logsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Method</th>
+                                <th>Status</th>
+                                <th>Duration</th>
+                                <th>Request ID</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in logs.items %}
+                            <tr data-method="{{ log.method }}" data-status="{{ log.status_code }}" 
+                                data-request-id="{{ log.request_id }}">
+                                <td>
+                                    <small class="text-muted">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</small>
+                                </td>
+                                <td>
+                                    <code class="method-badge">{{ log.method }}</code>
+                                </td>
+                                <td>
+                                    <span class="badge {% if log.status_code < 400 %}bg-success{% else %}bg-danger{% endif %}">
+                                        {{ log.status_code }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="duration-badge {% if log.duration_ms > 1000 %}text-warning{% elif log.duration_ms > 5000 %}text-danger{% else %}text-success{% endif %}">
+                                        {{ "%.0f"|format(log.duration_ms) }}ms
+                                    </span>
+                                </td>
+                                <td>
+                                    <code class="request-id">{{ log.request_id[:12] }}...</code>
+                                </td>
+                                <td>
+                                    <button class="btn btn-outline-primary btn-sm" 
+                                            onclick="viewLogDetails({{ log.id }})" title="View Details">
+                                        <i data-feather="eye"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Pagination -->
+                {% if logs.pages > 1 %}
+                <div class="card-footer">
+                    <nav aria-label="Logs pagination">
+                        <ul class="pagination justify-content-center mb-0">
+                            {% if logs.has_prev %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('main.logs', page=logs.prev_num) }}">
+                                    <i data-feather="chevron-left"></i>
+                                </a>
+                            </li>
+                            {% endif %}
+                            
+                            {% for page_num in logs.iter_pages() %}
+                                {% if page_num %}
+                                    {% if page_num != logs.page %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('main.logs', page=page_num) }}">{{ page_num }}</a>
+                                    </li>
+                                    {% else %}
+                                    <li class="page-item active">
+                                        <span class="page-link">{{ page_num }}</span>
+                                    </li>
+                                    {% endif %}
+                                {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if logs.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('main.logs', page=logs.next_num) }}">
+                                    <i data-feather="chevron-right"></i>
+                                </a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                </div>
+                {% endif %}
+                
+                {% else %}
+                <div class="text-center py-5">
+                    <i data-feather="file-text" class="text-muted mb-3" style="width: 64px; height: 64px;"></i>
+                    <h5 class="text-muted">No logs found</h5>
+                    <p class="text-muted">Request logs will appear here as the MCP server handles requests.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Log Details Modal -->
+<div class="modal fade" id="logDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i data-feather="eye" class="me-2"></i>
+                    Log Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Request</h6>
+                        <pre class="code-output" id="requestData">Loading...</pre>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Response</h6>
+                        <pre class="code-output" id="responseData">Loading...</pre>
+                    </div>
+                </div>
+                <hr>
+                <div class="row">
+                    <div class="col-md-3">
+                        <strong>Method:</strong>
+                        <div id="logMethod">-</div>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Status Code:</strong>
+                        <div id="logStatus">-</div>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Duration:</strong>
+                        <div id="logDuration">-</div>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Timestamp:</strong>
+                        <div id="logTimestamp">-</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function filterLogs() {
+    const methodFilter = document.getElementById('methodFilter').value.toLowerCase();
+    const statusFilter = document.getElementById('statusFilter').value;
+    const searchText = document.getElementById('searchInput').value.toLowerCase();
+    
+    const table = document.getElementById('logsTable');
+    if (!table) return;
+    
+    const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+    
+    for (let row of rows) {
+        const method = row.dataset.method.toLowerCase();
+        const status = parseInt(row.dataset.status);
+        const requestId = row.dataset.requestId.toLowerCase();
+        
+        let showRow = true;
+        
+        // Method filter
+        if (methodFilter && !method.includes(methodFilter)) {
+            showRow = false;
+        }
+        
+        // Status filter
+        if (statusFilter === 'success' && status >= 400) {
+            showRow = false;
+        } else if (statusFilter === 'error' && status < 400) {
+            showRow = false;
+        }
+        
+        // Search filter
+        if (searchText && !method.includes(searchText) && !requestId.includes(searchText)) {
+            showRow = false;
+        }
+        
+        row.style.display = showRow ? '' : 'none';
+    }
+}
+
+function clearFilters() {
+    document.getElementById('methodFilter').value = '';
+    document.getElementById('statusFilter').value = '';
+    document.getElementById('searchInput').value = '';
+    filterLogs();
+}
+
+async function viewLogDetails(logId) {
+    try {
+        // In a real implementation, this would fetch log details from the server
+        // For now, we'll show a placeholder
+        document.getElementById('requestData').textContent = 'Request data would be loaded here...';
+        document.getElementById('responseData').textContent = 'Response data would be loaded here...';
+        document.getElementById('logMethod').textContent = '-';
+        document.getElementById('logStatus').textContent = '-';
+        document.getElementById('logDuration').textContent = '-';
+        document.getElementById('logTimestamp').textContent = '-';
+        
+        new bootstrap.Modal(document.getElementById('logDetailsModal')).show();
+        
+    } catch (error) {
+        alert('Error loading log details: ' + error.message);
+    }
+}
+
+function refreshLogs() {
+    location.reload();
+}
+
+function clearLogs() {
+    if (confirm('Are you sure you want to clear all logs? This action cannot be undone.')) {
+        // In a real implementation, this would call an API to clear logs
+        alert('Clear logs functionality would be implemented here');
+    }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    feather.replace();
+});
+</script>
+{% endblock %}

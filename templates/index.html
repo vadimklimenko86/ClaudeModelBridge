@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Flask MCP Server{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3 mb-0">MCP Server Dashboard</h1>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-primary btn-sm" onclick="refreshStats()">
+                    <i data-feather="refresh-cw" class="me-1"></i>Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row mb-4">
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card stats-card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="stat-icon bg-primary">
+                        <i data-feather="tool"></i>
+                    </div>
+                    <div class="ms-3">
+                        <h5 class="card-title mb-0">{{ stats.total_tools }}</h5>
+                        <p class="card-text text-muted">Active Tools</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card stats-card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="stat-icon bg-success">
+                        <i data-feather="database"></i>
+                    </div>
+                    <div class="ms-3">
+                        <h5 class="card-title mb-0">{{ stats.total_resources }}</h5>
+                        <p class="card-text text-muted">Resources</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card stats-card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="stat-icon bg-info">
+                        <i data-feather="activity"></i>
+                    </div>
+                    <div class="ms-3">
+                        <h5 class="card-title mb-0">{{ stats.total_requests }}</h5>
+                        <p class="card-text text-muted">Total Requests</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card stats-card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="stat-icon bg-warning">
+                        <i data-feather="clock"></i>
+                    </div>
+                    <div class="ms-3">
+                        <h5 class="card-title mb-0">{{ "%.0f"|format(stats.avg_duration_ms) }}ms</h5>
+                        <p class="card-text text-muted">Avg Response</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MCP Protocol Tester -->
+<div class="row mb-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i data-feather="send" class="me-2"></i>
+                    MCP Protocol Tester
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <label class="form-label">Request</label>
+                        <textarea class="form-control code-input" id="mcpRequest" rows="8" placeholder="Enter MCP request JSON...">
+{
+  "method": "tools/list",
+  "params": {}
+}</textarea>
+                        <div class="mt-3">
+                            <button class="btn btn-primary" onclick="sendMCPRequest()">
+                                <i data-feather="send" class="me-1"></i>Send Request
+                            </button>
+                            <button class="btn btn-outline-secondary ms-2" onclick="clearMCPTester()">
+                                <i data-feather="x" class="me-1"></i>Clear
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Response</label>
+                        <pre class="code-output" id="mcpResponse">Response will appear here...</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Server Status -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i data-feather="server" class="me-2"></i>
+                    Server Status
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="status-item">
+                    <span class="status-label">Status:</span>
+                    <span class="badge bg-success">Online</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Error Rate:</span>
+                    <span class="text-muted">{{ "%.1f"|format(stats.error_rate) }}%</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Protocol:</span>
+                    <span class="text-muted">MCP 2024-11-05</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Version:</span>
+                    <span class="text-muted">1.0.0</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i data-feather="zap" class="me-2"></i>
+                    Quick Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('main.tools') }}" class="btn btn-outline-primary btn-sm">
+                        <i data-feather="tool" class="me-1"></i>Manage Tools
+                    </a>
+                    <a href="{{ url_for('main.api_docs') }}" class="btn btn-outline-info btn-sm">
+                        <i data-feather="book" class="me-1"></i>View API Docs
+                    </a>
+                    <a href="{{ url_for('main.logs') }}" class="btn btn-outline-secondary btn-sm">
+                        <i data-feather="file-text" class="me-1"></i>View Logs
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i data-feather="activity" class="me-2"></i>
+                    Recent Activity
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if recent_logs %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Status</th>
+                                <th>Duration</th>
+                                <th>Timestamp</th>
+                                <th>Request ID</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in recent_logs %}
+                            <tr>
+                                <td>
+                                    <code class="method-badge">{{ log.method }}</code>
+                                </td>
+                                <td>
+                                    <span class="badge {% if log.status_code < 400 %}bg-success{% else %}bg-danger{% endif %}">
+                                        {{ log.status_code }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="text-muted">{{ "%.0f"|format(log.duration_ms) }}ms</span>
+                                </td>
+                                <td>
+                                    <small class="text-muted">{{ log.timestamp.strftime('%H:%M:%S') }}</small>
+                                </td>
+                                <td>
+                                    <small class="font-monospace text-muted">{{ log.request_id[:8] }}...</small>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i data-feather="inbox" class="text-muted mb-2" style="width: 48px; height: 48px;"></i>
+                    <p class="text-muted">No recent activity</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function sendMCPRequest() {
+    const requestInput = document.getElementById('mcpRequest');
+    const responseOutput = document.getElementById('mcpResponse');
+    
+    try {
+        const requestData = JSON.parse(requestInput.value);
+        responseOutput.textContent = 'Sending request...';
+        
+        const response = await fetch('/api/mcp', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+        });
+        
+        const responseData = await response.json();
+        responseOutput.textContent = JSON.stringify(responseData, null, 2);
+        
+        // Trigger syntax highlighting
+        Prism.highlightElement(responseOutput);
+        
+    } catch (error) {
+        responseOutput.textContent = `Error: ${error.message}`;
+    }
+}
+
+function clearMCPTester() {
+    document.getElementById('mcpRequest').value = '';
+    document.getElementById('mcpResponse').textContent = 'Response will appear here...';
+}
+
+async function refreshStats() {
+    try {
+        const response = await fetch('/api/stats');
+        const stats = await response.json();
+        
+        // Update stats in the UI
+        location.reload(); // Simple refresh for now
+        
+    } catch (error) {
+        console.error('Error refreshing stats:', error);
+    }
+}
+</script>
+{% endblock %}
