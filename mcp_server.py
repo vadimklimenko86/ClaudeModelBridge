@@ -262,28 +262,32 @@ class MCPManager:
     def _log_request(self, request_id: str, method: str, request_data: Dict, 
                     response_data: Dict, status_code: int, duration_ms: float):
         """Log MCP request/response"""
-        log_entry = MCPLog(
-            request_id=request_id,
-            method=method,
-            request_data=json.dumps(request_data),
-            response_data=json.dumps(response_data),
-            status_code=status_code,
-            duration_ms=duration_ms
-        )
-        db.session.add(log_entry)
-        db.session.commit()
+        try:
+            log_entry = MCPLog()
+            log_entry.request_id = request_id
+            log_entry.method = method
+            log_entry.request_data = json.dumps(request_data)
+            log_entry.response_data = json.dumps(response_data)
+            log_entry.status_code = status_code
+            log_entry.duration_ms = duration_ms
+            
+            db.session.add(log_entry)
+            db.session.commit()
+        except Exception as e:
+            logger.error(f"Error logging request: {str(e)}")
+            db.session.rollback()
     
     def register_tool(self, name: str, description: str, schema: Dict, 
                      endpoint: Optional[str] = None, method: str = 'POST') -> bool:
         """Register a new tool"""
         try:
-            tool = Tool(
-                name=name,
-                description=description,
-                schema=json.dumps(schema),
-                endpoint=endpoint,
-                method=method
-            )
+            tool = Tool()
+            tool.name = name
+            tool.description = description
+            tool.schema = json.dumps(schema)
+            tool.endpoint = endpoint
+            tool.method = method
+            
             db.session.add(tool)
             db.session.commit()
             
@@ -299,59 +303,7 @@ class MCPManager:
             db.session.rollback()
             return False
     
-    def create_default_tools(self):
-        """Create default demonstration tools if none exist"""
-        if Tool.query.count() == 0:
-            logger.info("Creating default demonstration tools...")
-            
-            # Echo tool
-            echo_tool = Tool(
-                name='echo',
-                description='Echo back the input message',
-                schema=json.dumps({
-                    "type": "object",
-                    "properties": {
-                        "message": {
-                            "type": "string",
-                            "description": "Message to echo back"
-                        }
-                    },
-                    "required": ["message"]
-                })
-            )
-            
-            # System info tool
-            system_info_tool = Tool(
-                name='system_info',
-                description='Get system information',
-                schema=json.dumps({
-                    "type": "object",
-                    "properties": {},
-                    "required": []
-                })
-            )
-            
-            # Calculator tool
-            calculator_tool = Tool(
-                name='calculator',
-                description='Perform basic mathematical calculations',
-                schema=json.dumps({
-                    "type": "object",
-                    "properties": {
-                        "expression": {
-                            "type": "string",
-                            "description": "Mathematical expression to evaluate (e.g., '2 + 3 * 4')"
-                        }
-                    },
-                    "required": ["expression"]
-                })
-            )
-            
-            db.session.add_all([echo_tool, system_info_tool, calculator_tool])
-            db.session.commit()
-            
-            # Reload tools after creation
-            self.load_tools()
+
 
     def get_stats(self) -> Dict:
         """Get MCP server statistics"""
