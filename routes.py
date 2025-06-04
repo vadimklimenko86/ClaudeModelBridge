@@ -76,130 +76,63 @@ def mcp_endpoint():
         response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
         return response
 
-    # Handle GET requests - SSE for Claude.ai compatibility
+    # Handle GET requests - Server discovery for Claude.ai
     if request.method == 'GET':
-        accept_header = request.headers.get('Accept', '')
-        if 'text/event-stream' in accept_header:
-            # Claude.ai SSE-based JSON-RPC communication
-            logger.info("Serving SSE JSON-RPC stream for Claude.ai")
-            
-            def json_rpc_sse_stream():
-                try:
-                    # SSE JSON-RPC: Stream individual JSON-RPC messages
-                    # Each message is a complete standalone JSON-RPC call
-                    
-                    # Send initialization capabilities
-                    init_response = {
-                        "jsonrpc": "2.0",
-                        "id": None,
-                        "result": {
-                            "protocolVersion": "2025-03-26",
-                            "capabilities": {
-                                "tools": {"listChanged": True},
-                                "resources": {"subscribe": True, "listChanged": True},
-                                "logging": {},
-                                "prompts": {"listChanged": True}
-                            },
-                            "serverInfo": {
-                                "name": "Flask MCP Server",
-                                "version": "1.0.0"
+        logger.info("MCP server discovery request")
+        return jsonify({
+            'name': 'Flask MCP Server',
+            'version': '1.0.0',
+            'protocolVersion': '2024-11-05',
+            'capabilities': {
+                'tools': {'listChanged': True},
+                'resources': {'subscribe': True, 'listChanged': True}
+            },
+            'serverInfo': {
+                'name': 'Flask MCP Server',
+                'version': '1.0.0'
+            },
+            'transport': 'http',
+            'description': 'Model Context Protocol Server for Claude AI integration',
+            'tools': [
+                {
+                    'name': 'echo',
+                    'description': 'Echo back the input message',
+                    'inputSchema': {
+                        'type': 'object',
+                        'properties': {
+                            'message': {
+                                'type': 'string',
+                                'description': 'Message to echo back'
                             }
-                        }
+                        },
+                        'required': ['message']
                     }
-                    yield f"data: {json.dumps(init_response)}\n\n"
-                    
-                    # Send available tools as separate message
-                    tools_response = {
-                        "jsonrpc": "2.0",
-                        "method": "tools/list",
-                        "result": {
-                            "tools": [
-                                {
-                                    "name": "echo",
-                                    "description": "Echo back the input message",
-                                    "inputSchema": {
-                                        "type": "object",
-                                        "properties": {
-                                            "message": {
-                                                "type": "string",
-                                                "description": "Message to echo back"
-                                            }
-                                        },
-                                        "required": ["message"]
-                                    }
-                                },
-                                {
-                                    "name": "system_info",
-                                    "description": "Get system information",
-                                    "inputSchema": {
-                                        "type": "object",
-                                        "properties": {},
-                                        "required": []
-                                    }
-                                },
-                                {
-                                    "name": "calculator",
-                                    "description": "Perform basic mathematical calculations",
-                                    "inputSchema": {
-                                        "type": "object",
-                                        "properties": {
-                                            "expression": {
-                                                "type": "string",
-                                                "description": "Mathematical expression to evaluate"
-                                            }
-                                        },
-                                        "required": ["expression"]
-                                    }
-                                }
-                            ]
-                        }
+                },
+                {
+                    'name': 'system_info',
+                    'description': 'Get system information',
+                    'inputSchema': {
+                        'type': 'object',
+                        'properties': {},
+                        'required': []
                     }
-                    yield f"data: {json.dumps(tools_response)}\n\n"
-                    
-                    # Send ready notification
-                    ready_notification = {
-                        "jsonrpc": "2.0",
-                        "method": "notifications/ready",
-                        "params": {
-                            "status": "ready"
-                        }
+                },
+                {
+                    'name': 'calculator',
+                    'description': 'Perform basic mathematical calculations',
+                    'inputSchema': {
+                        'type': 'object',
+                        'properties': {
+                            'expression': {
+                                'type': 'string',
+                                'description': 'Mathematical expression to evaluate'
+                            }
+                        },
+                        'required': ['expression']
                     }
-                    yield f"data: {json.dumps(ready_notification)}\n\n"
-                    
-                except GeneratorExit:
-                    logger.info("Claude.ai SSE stream closed")
-                except Exception as e:
-                    logger.error(f"SSE JSON-RPC stream error: {e}")
-                    error_msg = {
-                        "jsonrpc": "2.0",
-                        "error": {
-                            "code": -32603,
-                            "message": f"Stream error: {str(e)}"
-                        }
-                    }
-                    yield f"data: {json.dumps(error_msg)}\n\n"
-            
-            response = Response(json_rpc_sse_stream(), mimetype='text/event-stream')
-            response.headers.add('Access-Control-Allow-Origin', '*')
-            response.headers.add('Access-Control-Allow-Headers', 'Authorization,Cache-Control,Content-Type')
-            response.headers.add('Cache-Control', 'no-cache')
-            response.headers.add('Connection', 'keep-alive')
-            response.headers.add('X-Accel-Buffering', 'no')
-            return response
-        else:
-            # Regular GET request for info
-            return jsonify({
-                'service': 'MCP Server',
-                'version': '1.0.0',
-                'status': 'active',
-                'description': 'Model Context Protocol Server for Claude AI integration',
-                'endpoint': request.url,
-                'methods': ['POST'],
-                'documentation': '/api-docs',
-                'tools_count': len(mcp_manager.tools),
-                'resources_count': len(mcp_manager.resources),
-                'transport': 'http+sse'
-            })
+                }
+            ]
+        })
 
     # Handle POST requests for MCP tool execution and protocol methods
     try:
@@ -223,12 +156,10 @@ def mcp_endpoint():
         
         if method == 'initialize':
             result = {
-                'protocolVersion': '2025-03-26',
+                'protocolVersion': '2024-11-05',
                 'capabilities': {
                     'tools': {'listChanged': True},
-                    'resources': {'subscribe': True, 'listChanged': True},
-                    'logging': {},
-                    'prompts': {'listChanged': True}
+                    'resources': {'subscribe': True, 'listChanged': True}
                 },
                 'serverInfo': {
                     'name': 'Flask MCP Server',
