@@ -272,19 +272,46 @@ function clearFilters() {
 
 async function viewLogDetails(logId) {
     try {
-        // In a real implementation, this would fetch log details from the server
-        // For now, we'll show a placeholder
-        document.getElementById('requestData').textContent = 'Request data would be loaded here...';
-        document.getElementById('responseData').textContent = 'Response data would be loaded here...';
-        document.getElementById('logMethod').textContent = '-';
-        document.getElementById('logStatus').textContent = '-';
-        document.getElementById('logDuration').textContent = '-';
-        document.getElementById('logTimestamp').textContent = '-';
+        // Show loading state
+        document.getElementById('requestData').textContent = 'Loading...';
+        document.getElementById('responseData').textContent = 'Loading...';
+        document.getElementById('logMethod').textContent = 'Loading...';
+        document.getElementById('logStatus').textContent = 'Loading...';
+        document.getElementById('logDuration').textContent = 'Loading...';
+        document.getElementById('logTimestamp').textContent = 'Loading...';
         
+        // Show modal
         new bootstrap.Modal(document.getElementById('logDetailsModal')).show();
         
+        // Fetch log details from server
+        const response = await fetch(`/mcp/logs/${logId}`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const logData = await response.json();
+        
+        // Update modal content with real data
+        document.getElementById('requestData').textContent = 
+            logData.request_data ? JSON.stringify(logData.request_data, null, 2) : 'No request data';
+        document.getElementById('responseData').textContent = 
+            logData.response_data ? JSON.stringify(logData.response_data, null, 2) : 'No response data';
+        document.getElementById('logMethod').textContent = logData.method || '-';
+        document.getElementById('logStatus').innerHTML = 
+            `<span class="badge ${logData.status_code < 400 ? 'bg-success' : 'bg-danger'}">${logData.status_code}</span>`;
+        document.getElementById('logDuration').innerHTML = 
+            `<span class="duration-badge ${logData.duration_ms > 1000 ? 'text-warning' : logData.duration_ms > 5000 ? 'text-danger' : 'text-success'}">${Math.round(logData.duration_ms)}ms</span>`;
+        document.getElementById('logTimestamp').textContent = 
+            new Date(logData.timestamp).toLocaleString();
+        
     } catch (error) {
-        alert('Error loading log details: ' + error.message);
+        // Update modal with error state
+        document.getElementById('requestData').textContent = `Error: ${error.message}`;
+        document.getElementById('responseData').textContent = `Error: ${error.message}`;
+        document.getElementById('logMethod').textContent = 'Error';
+        document.getElementById('logStatus').textContent = 'Error';
+        document.getElementById('logDuration').textContent = 'Error';
+        document.getElementById('logTimestamp').textContent = 'Error';
     }
 }
 

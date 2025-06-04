@@ -323,6 +323,25 @@ def get_stats():
     return jsonify(mcp_manager.get_stats())
 
 
+@api_bp.route('/logs/<int:log_id>', methods=['GET'])
+def get_log_details(log_id):
+    """Get detailed information for a specific log entry"""
+    try:
+        log = MCPLog.query.get_or_404(log_id)
+        return jsonify({
+            'id': log.id,
+            'request_id': log.request_id,
+            'method': log.method,
+            'status_code': log.status_code,
+            'duration_ms': log.duration_ms,
+            'timestamp': log.timestamp.isoformat(),
+            'request_data': json.loads(log.request_data) if log.request_data else None,
+            'response_data': json.loads(log.response_data) if log.response_data else None
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @api_bp.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
