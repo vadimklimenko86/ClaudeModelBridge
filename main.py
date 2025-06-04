@@ -28,7 +28,10 @@ from oauth_handler import oauth_handler
 # Create Flask app for gunicorn
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "mcp_oauth_secret_key_2024")
-CORS(app)
+app.config['SESSION_COOKIE_SECURE'] = False  # Allow HTTP for development
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+CORS(app, supports_credentials=True)
 
 # HTML template for dashboard
 DASHBOARD_HTML = """
