@@ -48,6 +48,19 @@ class RequestLogger:
         
         # Log to database for non-MCP requests
         if not request.path.startswith('/mcp/mcp'):
+            # Safely get response size without breaking direct passthrough mode
+            response_size = 0
+            try:
+                if hasattr(response, 'content_length') and response.content_length:
+                    response_size = response.content_length
+                elif hasattr(response, 'response') and response.response:
+                    # For static files, estimate size from headers
+                    content_length = response.headers.get('Content-Length')
+                    if content_length:
+                        response_size = int(content_length)
+            except:
+                response_size = 0
+            
             self.log_to_database(
                 request_id=request_id,
                 method=request.method,
@@ -57,7 +70,7 @@ class RequestLogger:
                 user_agent=request.headers.get('User-Agent', ''),
                 ip_address=request.remote_addr,
                 request_data=self.get_request_data(),
-                response_size=len(response.get_data()) if response.get_data() else 0
+                response_size=response_size
             )
         
         return response
