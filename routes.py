@@ -529,3 +529,65 @@ def oauth_token():
             'error': 'unsupported_grant_type',
             'error_description': f'Grant type {grant_type} is not supported'
         }), 400
+
+@main_bp.route('/oauth/register', methods=['POST', 'GET'])
+def oauth_register():
+    """OAuth 2.0 Dynamic Client Registration Endpoint
+    
+    Allows clients to register with the authorization server.
+    Supports both GET (registration form) and POST (registration API).
+    """
+    if request.method == 'GET':
+        # Show client registration form
+        return render_template('oauth_register.html')
+    
+    # Handle client registration
+    client_metadata = request.get_json() if request.is_json else {
+        'client_name': request.form.get('client_name'),
+        'client_uri': request.form.get('client_uri'),
+        'redirect_uris': request.form.getlist('redirect_uris') or [request.form.get('redirect_uri')],
+        'grant_types': request.form.getlist('grant_types') or ['authorization_code'],
+        'response_types': request.form.getlist('response_types') or ['code'],
+        'scope': request.form.get('scope', 'mcp:read')
+    }
+    
+    # Validate required fields
+    if not client_metadata.get('client_name'):
+        return jsonify({
+            'error': 'invalid_client_metadata',
+            'error_description': 'client_name is required'
+        }), 400
+    
+    if not client_metadata.get('redirect_uris'):
+        return jsonify({
+            'error': 'invalid_redirect_uri',
+            'error_description': 'At least one redirect_uri is required'
+        }), 400
+    
+    # Generate client credentials
+    client_id = f"client_{int(time.time())}"
+    client_secret = f"secret_{int(time.time())}"
+    
+    # Create client registration response
+    client_info = {
+        'client_id': client_id,
+        'client_secret': client_secret,
+        'client_name': client_metadata.get('client_name'),
+        'client_uri': client_metadata.get('client_uri'),
+        'redirect_uris': client_metadata.get('redirect_uris'),
+        'grant_types': client_metadata.get('grant_types', ['authorization_code']),
+        'response_types': client_metadata.get('response_types', ['code']),
+        'scope': client_metadata.get('scope', 'mcp:read'),
+        'token_endpoint_auth_method': 'client_secret_post',
+        'client_id_issued_at': int(time.time()),
+        'client_secret_expires_at': 0  # Never expires in this demo
+    }
+    
+    # In production, save client info to database
+    logger.info(f"Registered new OAuth client: {client_id}")
+    
+    if request.is_json:
+        return jsonify(client_info), 201
+    else:
+        # Show success page with client credentials
+        return render_template('oauth_register_success.html', client_info=client_info)

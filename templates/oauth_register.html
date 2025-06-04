@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}OAuth Client Registration{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h2">OAuth Client Registration</h1>
+                <a href="/" class="btn btn-outline-secondary">
+                    <i data-feather="arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+
+            <div class="row justify-content-center">
+                <div class="col-md-8 col-lg-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Register New OAuth Client</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-4">
+                                Register your application to receive OAuth credentials for accessing the MCP server.
+                            </p>
+
+                            <form method="POST" id="clientRegistrationForm">
+                                <div class="mb-3">
+                                    <label for="client_name" class="form-label">Application Name *</label>
+                                    <input type="text" class="form-control" id="client_name" name="client_name" required>
+                                    <div class="form-text">A human-readable name for your application</div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="client_uri" class="form-label">Application URL</label>
+                                    <input type="url" class="form-control" id="client_uri" name="client_uri" placeholder="https://example.com">
+                                    <div class="form-text">Homepage URL of your application</div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="redirect_uri" class="form-label">Redirect URI *</label>
+                                    <input type="url" class="form-control" id="redirect_uri" name="redirect_uri" required placeholder="https://example.com/oauth/callback">
+                                    <div class="form-text">Where users should be redirected after authorization</div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="grant_types" class="form-label">Grant Types</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="grant_types" value="authorization_code" id="grant_auth_code" checked>
+                                        <label class="form-check-label" for="grant_auth_code">
+                                            Authorization Code
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="grant_types" value="client_credentials" id="grant_client_creds">
+                                        <label class="form-check-label" for="grant_client_creds">
+                                            Client Credentials
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="scope" class="form-label">Requested Scopes</label>
+                                    <select class="form-select" name="scope" id="scope">
+                                        <option value="mcp:read">Read Access</option>
+                                        <option value="mcp:read mcp:write">Read & Write Access</option>
+                                        <option value="mcp:read mcp:write tools:execute">Full Access</option>
+                                    </select>
+                                </div>
+
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i data-feather="plus"></i> Register Client
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <h6 class="card-title mb-0">API Registration</h6>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted small">
+                                You can also register programmatically by sending a POST request to:
+                            </p>
+                            <code class="d-block p-2 bg-light rounded">
+                                POST /oauth/register
+                                Content-Type: application/json
+                                
+                                {
+                                  "client_name": "My App",
+                                  "client_uri": "https://example.com",
+                                  "redirect_uris": ["https://example.com/callback"],
+                                  "grant_types": ["authorization_code"],
+                                  "scope": "mcp:read"
+                                }
+                            </code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('clientRegistrationForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const grantTypes = [];
+    formData.getAll('grant_types').forEach(type => grantTypes.push(type));
+    
+    // Show loading state
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = '<i data-feather="loader" class="spinning"></i> Registering...';
+    submitBtn.disabled = true;
+    
+    fetch('/oauth/register', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.text())
+    .then(html => {
+        document.body.innerHTML = html;
+        feather.replace();
+    })
+    .catch(error => {
+        console.error('Registration failed:', error);
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+        alert('Registration failed. Please try again.');
+    });
+});
+</script>
+{% endblock %}
