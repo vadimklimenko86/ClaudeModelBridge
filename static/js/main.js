@@ -78,79 +78,18 @@ class ThemeManager {
     }
 }
 
-// WebSocket connection management
-class WebSocketManager {
+// HTTP-based connection management
+class ConnectionManager {
     constructor() {
-        this.socket = null;
-        this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 5;
-        this.reconnectDelay = 1000;
+        this.isOnline = true;
         this.init();
     }
     
     init() {
-        if (typeof io !== 'undefined') {
-            this.connect();
-        }
+        this.updateStatus('connected');
     }
     
-    connect() {
-        try {
-            this.socket = io({
-                transports: ['websocket', 'polling'],
-                timeout: 5000,
-                forceNew: true,
-                reconnection: true,
-                reconnectionAttempts: 3,
-                reconnectionDelay: 1000
-            });
-            this.setupEventListeners();
-        } catch (error) {
-            console.error('WebSocket connection failed:', error);
-            this.updateStatus('disconnected');
-            this.scheduleReconnect();
-        }
-    }
-    
-    setupEventListeners() {
-        if (!this.socket) return;
-        
-        this.socket.on('connect', () => {
-            console.log('WebSocket connected');
-            this.reconnectAttempts = 0;
-            this.updateStatus('connected');
-        });
-        
-        this.socket.on('disconnect', () => {
-            console.log('WebSocket disconnected');
-            this.updateStatus('disconnected');
-            this.scheduleReconnect();
-        });
-        
-        this.socket.on('mcp_activity', (data) => {
-            this.handleActivityUpdate(data);
-        });
-        
-        this.socket.on('tools_updated', (data) => {
-            this.handleToolsUpdate(data);
-        });
-        
-        this.socket.on('connect_error', (error) => {
-            console.error('WebSocket connection error:', error);
-            this.updateStatus('error');
-            this.scheduleReconnect();
-        });
-    }
-    
-    scheduleReconnect() {
-        if (this.reconnectAttempts < this.maxReconnectAttempts) {
-            setTimeout(() => {
-                this.reconnectAttempts++;
-                console.log(`Reconnection attempt ${this.reconnectAttempts}`);
-                this.connect();
-            }, this.reconnectDelay * Math.pow(2, this.reconnectAttempts));
-        }
-    }
+
     
     updateStatus(status) {
         const statusIndicator = document.getElementById('serverStatus');
@@ -376,7 +315,7 @@ document.addEventListener('DOMContentLoaded', function() {
     window.themeManager = new ThemeManager();
     
     // Initialize WebSocket manager
-    window.wsManager = new WebSocketManager();
+    window.connectionManager = new ConnectionManager();
     
     // Initialize Feather icons
     if (typeof feather !== 'undefined') {
