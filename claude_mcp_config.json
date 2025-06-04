@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "flask-mcp-server": {
-      "command": "curl",
-      "args": ["-X", "POST", "https://21d397d0-82f3-4fc2-893c-55bb08214050-00-1490hbmwtwihm.riker.replit.dev/mcp/"],
+      "command": "python",
+      "args": ["-c", "import requests; import json; import sys; r = requests.post('https://21d397d0-82f3-4fc2-893c-55bb08214050-00-1490hbmwtwihm.riker.replit.dev/mcp/', json=json.loads(sys.stdin.read())); print(r.text)"],
       "env": {
         "MCP_SERVER_URL": "https://21d397d0-82f3-4fc2-893c-55bb08214050-00-1490hbmwtwihm.riker.replit.dev/mcp/"
       }
