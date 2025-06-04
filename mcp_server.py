@@ -25,19 +25,31 @@ class MCPManager:
     def initialize(self):
         """Initialize the MCP manager with database tools and resources"""
         logger.info("Initializing MCP Manager...")
-        self.load_tools()
-        self.load_resources()
-        logger.info(f"Loaded {len(self.tools)} tools and {len(self.resources)} resources")
+        try:
+            self.load_tools()
+            self.load_resources()
+            logger.info(f"Loaded {len(self.tools)} tools and {len(self.resources)} resources")
+        except Exception as e:
+            logger.warning(f"Database initialization failed: {e}")
+            logger.info("Starting with empty tools and resources - they will be loaded on first request")
     
     def load_tools(self):
         """Load tools from database"""
-        tools = Tool.query.filter_by(is_active=True).all()
-        self.tools = {tool.name: tool.to_dict() for tool in tools}
+        try:
+            tools = Tool.query.filter_by(is_active=True).all()
+            self.tools = {tool.name: tool.to_dict() for tool in tools}
+        except Exception as e:
+            logger.warning(f"Failed to load tools from database: {e}")
+            self.tools = {}
     
     def load_resources(self):
         """Load resources from database"""
-        resources = Resource.query.filter_by(is_active=True).all()
-        self.resources = {resource.name: resource.to_dict() for resource in resources}
+        try:
+            resources = Resource.query.filter_by(is_active=True).all()
+            self.resources = {resource.name: resource.to_dict() for resource in resources}
+        except Exception as e:
+            logger.warning(f"Failed to load resources from database: {e}")
+            self.resources = {}
     
     def handle_mcp_request(self, request_data: Dict) -> Dict:
         """Handle incoming MCP requests"""
