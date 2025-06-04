@@ -1,9 +1,10 @@
 {
   "mcpServers": {
-    "flask-mcp-server": {
+    "official-mcp-server": {
       "command": "python",
-      "args": ["/home/runner/workspace/mcp_client.py"],
-      "cwd": "/home/runner/workspace"
+      "args": ["mcp_direct_server.py"],
+      "env": {},
+      "description": "Official MCP Server using Python SDK v1.9.2"
     }
   }
 }
