@@ -326,7 +326,6 @@ async function clearLogs() {
             const response = await fetch('/mcp/logs/clear', {
                 method: 'DELETE',
                 headers: {
-                    'Content-Type': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest'
                 }
             });
