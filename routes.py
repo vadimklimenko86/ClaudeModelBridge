@@ -81,7 +81,67 @@ def mcp_endpoint():
         accept_header = request.headers.get('Accept', '')
         if 'text/event-stream' in accept_header:
             # Claude.ai is requesting SSE connection
-            return mcp_sse_stream()
+            def generate_sse():
+                try:
+                    # Send initialization message with server capabilities
+                    init_message = {
+                        "jsonrpc": "2.0",
+                        "method": "initialize",
+                        "params": {
+                            "protocolVersion": "2024-11-05",
+                            "capabilities": {
+                                "tools": {"listChanged": True},
+                                "resources": {"subscribe": True, "listChanged": True},
+                                "logging": {}
+                            },
+                            "serverInfo": {
+                                "name": "Flask MCP Server",
+                                "version": "1.0.0"
+                            }
+                        }
+                    }
+                    yield f"data: {json.dumps(init_message)}\n\n"
+                    
+                    # Send tools list
+                    tools_message = {
+                        "jsonrpc": "2.0",
+                        "method": "tools/list",
+                        "result": {
+                            "tools": list(mcp_manager.tools.values())
+                        }
+                    }
+                    yield f"data: {json.dumps(tools_message)}\n\n"
+                    
+                    # Keep connection alive with periodic heartbeats
+                    while True:
+                        heartbeat = {
+                            "type": "heartbeat",
+                            "timestamp": time.time(),
+                            "status": "alive"
+                        }
+                        yield f"data: {json.dumps(heartbeat)}\n\n"
+                        time.sleep(30)
+                        
+                except GeneratorExit:
+                    logger.info("SSE connection closed by client")
+                except Exception as e:
+                    logger.error(f"SSE stream error: {e}")
+                    error_message = {
+                        "jsonrpc": "2.0",
+                        "error": {
+                            "code": -32603,
+                            "message": f"Internal error: {str(e)}"
+                        }
+                    }
+                    yield f"data: {json.dumps(error_message)}\n\n"
+            
+            response = Response(generate_sse(), mimetype='text/event-stream')
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            response.headers.add('Access-Control-Allow-Headers', 'Authorization,Cache-Control')
+            response.headers.add('Cache-Control', 'no-cache')
+            response.headers.add('Connection', 'keep-alive')
+            response.headers.add('X-Accel-Buffering', 'no')
+            return response
         else:
             # Regular GET request for info
             return jsonify({
