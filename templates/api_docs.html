@@ -230,6 +230,56 @@
                     </div>
                 </div>
                 
+                <!-- OAuth Discovery API -->
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="method-badge method-get">GET</span>
+                        <code class="endpoint-path">/.well-known/oauth-authorization-server</code>
+                        <span class="endpoint-title">OAuth Authorization Server Discovery</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>OAuth 2.0 authorization server metadata (RFC 8414) as required by MCP specification.</p>
+                        <div class="code-example">
+                            <h6>Response:</h6>
+                            <pre><code class="language-json">{
+  "issuer": "http://localhost:5000",
+  "authorization_endpoint": "http://localhost:5000/oauth/authorize",
+  "token_endpoint": "http://localhost:5000/oauth/token",
+  "jwks_uri": "http://localhost:5000/.well-known/jwks.json",
+  "scopes_supported": ["mcp:read", "mcp:write", "tools:execute", "resources:read", "admin"],
+  "response_types_supported": ["code", "token"],
+  "grant_types_supported": ["authorization_code", "client_credentials", "refresh_token"]
+}</code></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="method-badge method-get">GET</span>
+                        <code class="endpoint-path">/.well-known/jwks.json</code>
+                        <span class="endpoint-title">JSON Web Key Set (JWKS)</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Public keys for JWT token verification.</p>
+                        <div class="code-example">
+                            <h6>Response:</h6>
+                            <pre><code class="language-json">{
+  "keys": [
+    {
+      "kty": "RSA",
+      "use": "sig",
+      "kid": "mcp-server-key-1",
+      "alg": "RS256",
+      "n": "...",
+      "e": "AQAB"
+    }
+  ]
+}</code></pre>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Authorization API -->
                 <div class="endpoint-card">
                     <div class="endpoint-header">
