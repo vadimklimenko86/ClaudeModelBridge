@@ -76,7 +76,7 @@ class OAuth2Handler:
         
         # Default client for testing (in production, store in database)
         self.clients = {
-            "claude_ai_client": {
+            "550e8400-e29b-41d4-a716-446655440000": {
                 "client_secret": "claude_secret_key_2024",
                 "redirect_uris": [
                     "https://claude.ai/oauth/callback",
@@ -88,7 +88,7 @@ class OAuth2Handler:
                 "response_types": ["code"],
                 "scope": "mcp:tools mcp:resources mcp:prompts system:read system:monitor claudeai read write admin"
             },
-            "mcp_test_client": {
+            "660e8400-e29b-41d4-a716-446655440001": {
                 "client_secret": "test_secret_key_2024",
                 "redirect_uris": [
                     "http://localhost:5000/oauth/callback",
@@ -146,7 +146,7 @@ class OAuth2Handler:
             return True
         
         # For Claude.ai client, allow any scope to ensure compatibility
-        if client_id == "claude_ai_client":
+        if client_id == "550e8400-e29b-41d4-a716-446655440000":
             return True
         
         client_scope = self.clients.get(client_id, {}).get("scope", "")
