@@ -58,6 +58,12 @@ def create_app():
     from routes import main_bp, api_bp
     app.register_blueprint(main_bp)
     app.register_blueprint(api_bp, url_prefix='/mcp')
+    
+    # Add direct MCP endpoint for better compatibility
+    @app.route('/mcp', methods=['POST', 'OPTIONS'])
+    def direct_mcp_endpoint():
+        from routes import mcp_endpoint
+        return mcp_endpoint()
 
     with app.app_context():
         # Import models to ensure tables are created
