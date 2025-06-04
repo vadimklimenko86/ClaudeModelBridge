@@ -242,7 +242,7 @@ async function sendMCPRequest() {
         const requestData = JSON.parse(requestInput.value);
         responseOutput.textContent = 'Sending request...';
         
-        const response = await fetch('/api/mcp', {
+        const response = await fetch('/mcp/mcp', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -268,7 +268,7 @@ function clearMCPTester() {
 
 async function refreshStats() {
     try {
-        const response = await fetch('/api/stats');
+        const response = await fetch('/mcp/stats');
         const stats = await response.json();
         
         // Update stats in the UI
