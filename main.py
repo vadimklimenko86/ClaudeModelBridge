@@ -860,7 +860,11 @@ def require_oauth(scopes=None):
             if scopes:
                 token_scopes = set(token_obj.scope.split())
                 required_scopes = set(scopes)
-                if not required_scopes.issubset(token_scopes):
+                
+                # Allow "claudeai" scope to access all MCP functions
+                if "claudeai" in token_scopes:
+                    pass  # claudeai scope grants full access
+                elif not required_scopes.issubset(token_scopes):
                     return jsonify({"error": "insufficient_scope", "error_description": "Insufficient scope"}), 403
             
             # Store token info in request context
