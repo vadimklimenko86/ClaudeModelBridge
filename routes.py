@@ -80,64 +80,89 @@ def mcp_endpoint():
     if request.method == 'GET':
         accept_header = request.headers.get('Accept', '')
         if 'text/event-stream' in accept_header:
-            # Claude.ai is requesting SSE connection
-            def generate_sse():
-                try:
-                    # Send initialization message with server capabilities
-                    init_message = {
-                        "jsonrpc": "2.0",
-                        "method": "initialize",
-                        "params": {
-                            "protocolVersion": "2024-11-05",
-                            "capabilities": {
-                                "tools": {"listChanged": True},
-                                "resources": {"subscribe": True, "listChanged": True},
-                                "logging": {}
-                            },
-                            "serverInfo": {
-                                "name": "Flask MCP Server",
-                                "version": "1.0.0"
-                            }
-                        }
-                    }
-                    yield f"data: {json.dumps(init_message)}\n\n"
-                    
-                    # Send tools list
-                    tools_message = {
-                        "jsonrpc": "2.0",
-                        "method": "tools/list",
-                        "result": {
-                            "tools": list(mcp_manager.tools.values())
-                        }
-                    }
-                    yield f"data: {json.dumps(tools_message)}\n\n"
-                    
-                    # Keep connection alive with periodic heartbeats
-                    while True:
-                        heartbeat = {
-                            "type": "heartbeat",
-                            "timestamp": time.time(),
-                            "status": "alive"
-                        }
-                        yield f"data: {json.dumps(heartbeat)}\n\n"
-                        time.sleep(30)
-                        
-                except GeneratorExit:
-                    logger.info("SSE connection closed by client")
-                except Exception as e:
-                    logger.error(f"SSE stream error: {e}")
-                    error_message = {
-                        "jsonrpc": "2.0",
-                        "error": {
-                            "code": -32603,
-                            "message": f"Internal error: {str(e)}"
-                        }
-                    }
-                    yield f"data: {json.dumps(error_message)}\n\n"
+            # Claude.ai is requesting SSE connection - implement proper MCP HTTP+SSE transport
+            logger.info("Serving MCP HTTP+SSE stream for Claude.ai integration")
             
-            response = Response(generate_sse(), mimetype='text/event-stream')
+            def mcp_sse_generator():
+                # MCP HTTP+SSE transport: each message is a complete JSON-RPC message
+                # Start with handshake notification
+                handshake = {
+                    "jsonrpc": "2.0",
+                    "method": "notifications/initialized",
+                    "params": {}
+                }
+                yield f"data: {json.dumps(handshake)}\n\n"
+                
+                # Send server info when requested
+                server_info = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {
+                            "tools": {"listChanged": True},
+                            "resources": {"subscribe": True, "listChanged": True},
+                            "logging": {}
+                        },
+                        "serverInfo": {
+                            "name": "Flask MCP Server",
+                            "version": "1.0.0"
+                        }
+                    }
+                }
+                yield f"data: {json.dumps(server_info)}\n\n"
+                
+                # Send tools list
+                tools_list = {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "result": {
+                        "tools": [
+                            {
+                                "name": "echo",
+                                "description": "Echo back the input message",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "description": "Message to echo back"
+                                        }
+                                    },
+                                    "required": ["message"]
+                                }
+                            },
+                            {
+                                "name": "system_info",
+                                "description": "Get system information",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {},
+                                    "required": []
+                                }
+                            },
+                            {
+                                "name": "calculator",
+                                "description": "Perform basic mathematical calculations",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "expression": {
+                                            "type": "string",
+                                            "description": "Mathematical expression to evaluate"
+                                        }
+                                    },
+                                    "required": ["expression"]
+                                }
+                            }
+                        ]
+                    }
+                }
+                yield f"data: {json.dumps(tools_list)}\n\n"
+            
+            response = Response(mcp_sse_generator(), mimetype='text/event-stream')
             response.headers.add('Access-Control-Allow-Origin', '*')
-            response.headers.add('Access-Control-Allow-Headers', 'Authorization,Cache-Control')
+            response.headers.add('Access-Control-Allow-Headers', 'Authorization,Cache-Control,Content-Type')
             response.headers.add('Cache-Control', 'no-cache')
             response.headers.add('Connection', 'keep-alive')
             response.headers.add('X-Accel-Buffering', 'no')
