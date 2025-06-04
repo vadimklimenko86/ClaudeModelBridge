@@ -74,8 +74,9 @@ class OAuth2Handler:
             "admin"
         ]
         
-        # Default client for testing (in production, store in database)
+        # Multiple client ID formats supported for maximum compatibility
         self.clients = {
+            # UUID format for strict validation environments
             "550e8400-e29b-41d4-a716-446655440000": {
                 "client_secret": "claude_secret_key_2024",
                 "redirect_uris": [
@@ -84,11 +85,36 @@ class OAuth2Handler:
                     "http://localhost:5000/oauth/callback",
                     "urn:ietf:wg:oauth:2.0:oob"
                 ],
-                "grant_types": ["authorization_code", "refresh_token"],
+                "grant_types": ["authorization_code", "refresh_token", "client_credentials"],
                 "response_types": ["code"],
                 "scope": "mcp:tools mcp:resources mcp:prompts system:read system:monitor claudeai read write admin"
             },
+            # String format for legacy compatibility
+            "claude_ai_client": {
+                "client_secret": "claude_secret_key_2024",
+                "redirect_uris": [
+                    "https://claude.ai/oauth/callback",
+                    "http://localhost:8080/callback",
+                    "http://localhost:5000/oauth/callback",
+                    "urn:ietf:wg:oauth:2.0:oob"
+                ],
+                "grant_types": ["authorization_code", "refresh_token", "client_credentials"],
+                "response_types": ["code"],
+                "scope": "mcp:tools mcp:resources mcp:prompts system:read system:monitor claudeai read write admin"
+            },
+            # Test client with UUID format
             "660e8400-e29b-41d4-a716-446655440001": {
+                "client_secret": "test_secret_key_2024",
+                "redirect_uris": [
+                    "http://localhost:5000/oauth/callback",
+                    "urn:ietf:wg:oauth:2.0:oob"
+                ],
+                "grant_types": ["authorization_code", "refresh_token", "client_credentials"],
+                "response_types": ["code"],
+                "scope": "mcp:tools mcp:resources system:read"
+            },
+            # Test client with string format
+            "mcp_test_client": {
                 "client_secret": "test_secret_key_2024",
                 "redirect_uris": [
                     "http://localhost:5000/oauth/callback",
@@ -125,11 +151,15 @@ class OAuth2Handler:
     
     def validate_client(self, client_id: str, client_secret: str = None) -> bool:
         """Validate client credentials"""
-        if client_id not in self.clients:
+        # Normalize client_id - handle both UUID and string formats
+        normalized_client_id = str(client_id).strip()
+        
+        # Check if client exists
+        if normalized_client_id not in self.clients:
             return False
         
         if client_secret is not None:
-            return self.clients[client_id]["client_secret"] == client_secret
+            return self.clients[normalized_client_id]["client_secret"] == client_secret
         
         return True
     
@@ -145,8 +175,9 @@ class OAuth2Handler:
         if not requested_scope:
             return True
         
-        # For Claude.ai client, allow any scope to ensure compatibility
-        if client_id == "550e8400-e29b-41d4-a716-446655440000":
+        # For Claude.ai clients (both UUID and string format), allow any scope
+        claude_clients = ["550e8400-e29b-41d4-a716-446655440000", "claude_ai_client"]
+        if client_id in claude_clients:
             return True
         
         client_scope = self.clients.get(client_id, {}).get("scope", "")
