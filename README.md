@@ -1,16 +1,18 @@
 # Remote MCP Server
 
-A complete Remote Model Context Protocol (MCP) server implementation using the official Python SDK v1.9.2, designed for seamless integration with Claude.ai.
+A complete Remote Model Context Protocol (MCP) server implementation using the official Python SDK v1.9.2, designed for seamless integration with Claude.ai and featuring comprehensive OAuth 2.0 authorization.
 
 ## Features
 
 - **Official MCP SDK v1.9.2** - Uses the authentic Python SDK without wrappers
 - **Full Claude.ai Compatibility** - Implements complete MCP specification
+- **OAuth 2.0 Authorization** - Complete OAuth 2.0 server with PKCE support
 - **Multiple Transports** - Supports stdio and HTTP transports
 - **System Monitoring** - Real-time system metrics and information
 - **Mathematical Calculator** - Safe expression evaluation with functions
 - **Echo Tool** - Message echoing with metadata and timestamps
 - **Resource Access** - System metrics and platform information resources
+- **Security** - Protected endpoints with scope-based access control
 
 ## Quick Start
 

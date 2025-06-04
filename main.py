@@ -15,15 +15,19 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 # Import Flask for WSGI compatibility with gunicorn
-from flask import Flask, jsonify, render_template_string
+from flask import Flask, jsonify, render_template_string, request, redirect, url_for, session
 from flask_cors import CORS
 import json
 import time
 import platform
 import psutil
+import base64
+import urllib.parse
+from oauth_handler import oauth_handler
 
 # Create Flask app for gunicorn
 app = Flask(__name__)
+app.secret_key = os.environ.get("SESSION_SECRET", "mcp_oauth_secret_key_2024")
 CORS(app)
 
 # HTML template for dashboard
@@ -545,13 +549,353 @@ def call_tool(tool_name):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# OAuth 2.0 Authorization Server Metadata Discovery
+@app.route('/.well-known/oauth-authorization-server')
+def oauth_metadata():
+    """OAuth 2.0 Authorization Server Metadata Discovery"""
+    return jsonify(oauth_handler.get_authorization_server_metadata())
+
+# OAuth 2.0 Authorization Endpoint
+@app.route('/oauth/authorize')
+def oauth_authorize():
+    """OAuth 2.0 Authorization Endpoint"""
+    # Extract parameters
+    response_type = request.args.get('response_type')
+    client_id = request.args.get('client_id')
+    redirect_uri = request.args.get('redirect_uri')
+    scope = request.args.get('scope', '')
+    state = request.args.get('state')
+    code_challenge = request.args.get('code_challenge')
+    code_challenge_method = request.args.get('code_challenge_method', 'plain')
+    
+    # Validate required parameters
+    if not response_type or not client_id or not redirect_uri:
+        return jsonify({"error": "invalid_request", "error_description": "Missing required parameters"}), 400
+    
+    # Validate response type
+    if response_type != 'code':
+        return jsonify({"error": "unsupported_response_type", "error_description": "Only 'code' response type is supported"}), 400
+    
+    # Validate client
+    if not oauth_handler.validate_client(client_id):
+        return jsonify({"error": "invalid_client", "error_description": "Invalid client_id"}), 400
+    
+    # Validate redirect URI
+    if not oauth_handler.validate_redirect_uri(client_id, redirect_uri):
+        return jsonify({"error": "invalid_request", "error_description": "Invalid redirect_uri"}), 400
+    
+    # Validate scope
+    if not oauth_handler.validate_scope(scope, client_id):
+        return jsonify({"error": "invalid_scope", "error_description": "Invalid scope"}), 400
+    
+    # Store authorization request in session
+    session['auth_request'] = {
+        'client_id': client_id,
+        'redirect_uri': redirect_uri,
+        'scope': scope,
+        'state': state,
+        'code_challenge': code_challenge,
+        'code_challenge_method': code_challenge_method
+    }
+    
+    # For demo purposes, auto-approve (in production, show consent form)
+    return redirect(url_for('oauth_consent'))
+
+@app.route('/oauth/consent')
+def oauth_consent():
+    """OAuth 2.0 User Consent Page"""
+    auth_request = session.get('auth_request')
+    if not auth_request:
+        return jsonify({"error": "invalid_request", "error_description": "No authorization request found"}), 400
+    
+    consent_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>MCP Server Authorization</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 50px; background: #f5f5f5; }}
+            .consent-box {{ background: white; padding: 30px; border-radius: 10px; max-width: 500px; margin: 0 auto; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }}
+            .btn {{ padding: 12px 24px; margin: 10px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }}
+            .btn-approve {{ background: #48bb78; color: white; }}
+            .btn-deny {{ background: #e53e3e; color: white; }}
+            .scopes {{ background: #f7fafc; padding: 15px; border-radius: 5px; margin: 15px 0; }}
+        </style>
+    </head>
+    <body>
+        <div class="consent-box">
+            <h2>Authorization Request</h2>
+            <p><strong>Client:</strong> {auth_request['client_id']}</p>
+            <p><strong>Requested Permissions:</strong></p>
+            <div class="scopes">
+                {auth_request['scope'] or 'Basic access'}
+            </div>
+            <p>Do you want to authorize this application to access your MCP server?</p>
+            <form method="post" action="/oauth/authorize_decision">
+                <button type="submit" name="decision" value="approve" class="btn btn-approve">Approve</button>
+                <button type="submit" name="decision" value="deny" class="btn btn-deny">Deny</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """
+    return consent_html
+
+@app.route('/oauth/authorize_decision', methods=['POST'])
+def oauth_authorize_decision():
+    """Handle user authorization decision"""
+    auth_request = session.get('auth_request')
+    if not auth_request:
+        return jsonify({"error": "invalid_request", "error_description": "No authorization request found"}), 400
+    
+    decision = request.form.get('decision')
+    
+    if decision == 'approve':
+        # Generate authorization code
+        code = oauth_handler.create_authorization_code(
+            client_id=auth_request['client_id'],
+            redirect_uri=auth_request['redirect_uri'],
+            scope=auth_request['scope'],
+            challenge=auth_request.get('code_challenge'),
+            challenge_method=auth_request.get('code_challenge_method'),
+            user_id='demo_user'  # In production, use actual user ID
+        )
+        
+        # Build redirect URL
+        redirect_url = auth_request['redirect_uri']
+        params = {'code': code}
+        if auth_request.get('state'):
+            params['state'] = auth_request['state']
+        
+        redirect_url += '?' + urllib.parse.urlencode(params)
+        
+        # Clear session
+        session.pop('auth_request', None)
+        
+        return redirect(redirect_url)
+    
+    else:
+        # User denied authorization
+        redirect_url = auth_request['redirect_uri']
+        params = {'error': 'access_denied', 'error_description': 'User denied authorization'}
+        if auth_request.get('state'):
+            params['state'] = auth_request['state']
+        
+        redirect_url += '?' + urllib.parse.urlencode(params)
+        
+        # Clear session
+        session.pop('auth_request', None)
+        
+        return redirect(redirect_url)
+
+# OAuth 2.0 Token Endpoint
+@app.route('/oauth/token', methods=['POST'])
+def oauth_token():
+    """OAuth 2.0 Token Endpoint"""
+    # Get client credentials from Authorization header or form data
+    auth_header = request.headers.get('Authorization')
+    if auth_header and auth_header.startswith('Basic '):
+        # Decode Basic auth
+        encoded_credentials = auth_header[6:]
+        decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
+        client_id, client_secret = decoded_credentials.split(':', 1)
+    else:
+        # Get from form data
+        client_id = request.form.get('client_id')
+        client_secret = request.form.get('client_secret')
+    
+    grant_type = request.form.get('grant_type')
+    
+    if not grant_type:
+        return jsonify({"error": "invalid_request", "error_description": "Missing grant_type"}), 400
+    
+    if grant_type == 'authorization_code':
+        code = request.form.get('code')
+        redirect_uri = request.form.get('redirect_uri')
+        code_verifier = request.form.get('code_verifier')
+        
+        if not code or not redirect_uri:
+            return jsonify({"error": "invalid_request", "error_description": "Missing required parameters"}), 400
+        
+        token_response = oauth_handler.exchange_authorization_code(
+            code=code,
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+            code_verifier=code_verifier
+        )
+        
+        if not token_response:
+            return jsonify({"error": "invalid_grant", "error_description": "Invalid authorization code"}), 400
+        
+        return jsonify(token_response)
+    
+    elif grant_type == 'refresh_token':
+        refresh_token = request.form.get('refresh_token')
+        
+        if not refresh_token:
+            return jsonify({"error": "invalid_request", "error_description": "Missing refresh_token"}), 400
+        
+        token_response = oauth_handler.refresh_access_token(
+            refresh_token=refresh_token,
+            client_id=client_id,
+            client_secret=client_secret
+        )
+        
+        if not token_response:
+            return jsonify({"error": "invalid_grant", "error_description": "Invalid refresh token"}), 400
+        
+        return jsonify(token_response)
+    
+    elif grant_type == 'client_credentials':
+        scope = request.form.get('scope', '')
+        
+        token_response = oauth_handler.client_credentials_grant(
+            client_id=client_id,
+            client_secret=client_secret,
+            scope=scope
+        )
+        
+        if not token_response:
+            return jsonify({"error": "invalid_client", "error_description": "Invalid client credentials"}), 400
+        
+        return jsonify(token_response)
+    
+    else:
+        return jsonify({"error": "unsupported_grant_type", "error_description": f"Grant type '{grant_type}' is not supported"}), 400
+
+# OAuth 2.0 Token Revocation Endpoint
+@app.route('/oauth/revoke', methods=['POST'])
+def oauth_revoke():
+    """OAuth 2.0 Token Revocation Endpoint"""
+    # Get client credentials
+    auth_header = request.headers.get('Authorization')
+    if auth_header and auth_header.startswith('Basic '):
+        encoded_credentials = auth_header[6:]
+        decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
+        client_id, client_secret = decoded_credentials.split(':', 1)
+    else:
+        client_id = request.form.get('client_id')
+        client_secret = request.form.get('client_secret')
+    
+    token = request.form.get('token')
+    
+    if not token:
+        return jsonify({"error": "invalid_request", "error_description": "Missing token"}), 400
+    
+    success = oauth_handler.revoke_token(token, client_id, client_secret)
+    
+    if success:
+        return '', 200  # RFC 7009: successful revocation returns 200 with empty body
+    else:
+        return jsonify({"error": "invalid_client", "error_description": "Invalid client credentials or token"}), 400
+
+# OAuth 2.0 Token Introspection Endpoint
+@app.route('/oauth/introspect', methods=['POST'])
+def oauth_introspect():
+    """OAuth 2.0 Token Introspection Endpoint"""
+    # Get client credentials
+    auth_header = request.headers.get('Authorization')
+    if auth_header and auth_header.startswith('Basic '):
+        encoded_credentials = auth_header[6:]
+        decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
+        client_id, client_secret = decoded_credentials.split(':', 1)
+    else:
+        client_id = request.form.get('client_id')
+        client_secret = request.form.get('client_secret')
+    
+    token = request.form.get('token')
+    
+    if not token:
+        return jsonify({"error": "invalid_request", "error_description": "Missing token"}), 400
+    
+    introspection_result = oauth_handler.introspect_token(token, client_id, client_secret)
+    return jsonify(introspection_result)
+
+# OAuth 2.0 Callback for testing
+@app.route('/oauth/callback')
+def oauth_callback():
+    """OAuth 2.0 Callback for testing"""
+    code = request.args.get('code')
+    state = request.args.get('state')
+    error = request.args.get('error')
+    
+    if error:
+        return f"""
+        <h2>Authorization Error</h2>
+        <p><strong>Error:</strong> {error}</p>
+        <p><strong>Description:</strong> {request.args.get('error_description', 'Unknown error')}</p>
+        <p><strong>State:</strong> {state}</p>
+        """
+    
+    if code:
+        return f"""
+        <h2>Authorization Successful</h2>
+        <p><strong>Authorization Code:</strong> {code}</p>
+        <p><strong>State:</strong> {state}</p>
+        <p>Use this code to exchange for an access token at the token endpoint.</p>
+        """
+    
+    return "No authorization code received", 400
+
+# Protected MCP endpoints with OAuth 2.0
+def require_oauth(scopes=None):
+    """Decorator to require OAuth 2.0 authorization"""
+    def decorator(f):
+        def decorated_function(*args, **kwargs):
+            auth_header = request.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return jsonify({"error": "unauthorized", "error_description": "Missing or invalid access token"}), 401
+            
+            access_token = auth_header[7:]  # Remove 'Bearer ' prefix
+            token_obj = oauth_handler.validate_access_token(access_token)
+            
+            if not token_obj:
+                return jsonify({"error": "invalid_token", "error_description": "Access token is invalid or expired"}), 401
+            
+            # Check scope if required
+            if scopes:
+                token_scopes = set(token_obj.scope.split())
+                required_scopes = set(scopes)
+                if not required_scopes.issubset(token_scopes):
+                    return jsonify({"error": "insufficient_scope", "error_description": "Insufficient scope"}), 403
+            
+            # Store token info in request context
+            request.oauth_token = token_obj
+            return f(*args, **kwargs)
+        
+        decorated_function.__name__ = f.__name__
+        return decorated_function
+    return decorator
+
+# Protected MCP endpoints
+@app.route('/mcp/protected/tools')
+@require_oauth(['mcp:tools'])
+def protected_list_tools():
+    """List MCP tools (OAuth protected)"""
+    return list_tools()
+
+@app.route('/mcp/protected/call/<tool_name>', methods=['POST'])
+@require_oauth(['mcp:tools'])
+def protected_call_tool(tool_name):
+    """Call MCP tool (OAuth protected)"""
+    arguments = request.get_json() or {}
+    return call_tool(tool_name)
+
+@app.route('/mcp/protected/resources')
+@require_oauth(['mcp:resources'])
+def protected_list_resources():
+    """List MCP resources (OAuth protected)"""
+    return list_resources()
+
 if __name__ == "__main__":
     # Create necessary directories
     Path("templates").mkdir(exist_ok=True)
     Path("static").mkdir(exist_ok=True)
     
-    logger.info("Starting Remote MCP Server")
+    logger.info("Starting Remote MCP Server with OAuth 2.0")
     logger.info("Official Python SDK v1.9.2")
     logger.info("Protocol Version: 2024-11-05")
+    logger.info("OAuth 2.0 Authorization Server ready")
     
     app.run(host="0.0.0.0", port=5000, debug=True)
