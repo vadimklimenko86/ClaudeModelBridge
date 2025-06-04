@@ -7,7 +7,14 @@ from sqlalchemy.orm import DeclarativeBase
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('mcp_server.log')
+    ]
+)
 
 
 class Base(DeclarativeBase):
@@ -42,6 +49,10 @@ def create_app():
     #                  async_mode='threading',
     #                  logger=False,
     #                  engineio_logger=False)
+
+    # Initialize request logging
+    from request_logger import RequestLogger
+    request_logger = RequestLogger(app)
 
     # Register routes
     from routes import main_bp, api_bp
