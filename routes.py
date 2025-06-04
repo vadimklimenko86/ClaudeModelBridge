@@ -98,11 +98,12 @@ def mcp_endpoint():
                     "jsonrpc": "2.0",
                     "id": 1,
                     "result": {
-                        "protocolVersion": "2024-11-05",
+                        "protocolVersion": "2025-03-26",
                         "capabilities": {
                             "tools": {"listChanged": True},
                             "resources": {"subscribe": True, "listChanged": True},
-                            "logging": {}
+                            "logging": {},
+                            "prompts": {"listChanged": True}
                         },
                         "serverInfo": {
                             "name": "Flask MCP Server",
@@ -204,11 +205,12 @@ def mcp_endpoint():
         
         if method == 'initialize':
             result = {
-                'protocolVersion': '2024-11-05',
+                'protocolVersion': '2025-03-26',
                 'capabilities': {
                     'tools': {'listChanged': True},
                     'resources': {'subscribe': True, 'listChanged': True},
-                    'logging': {}
+                    'logging': {},
+                    'prompts': {'listChanged': True}
                 },
                 'serverInfo': {
                     'name': 'Flask MCP Server',

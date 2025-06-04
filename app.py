@@ -44,11 +44,16 @@ def create_app():
 
     # Initialize extensions
     db.init_app(app)
-    # Disable WebSocket temporarily to avoid resource issues
-    # socketio.init_app(app, cors_allowed_origins="*",
-    #                  async_mode='threading',
-    #                  logger=False,
-    #                  engineio_logger=False)
+    
+    # Initialize SocketIO for WebSocket-based MCP protocol
+    from flask_socketio import SocketIO
+    socketio = SocketIO(app, cors_allowed_origins="*",
+                       async_mode='eventlet',
+                       logger=False,
+                       engineio_logger=False)
+    
+    # Store socketio instance for use in routes
+    app.socketio = socketio
 
     # Initialize request logging
     from request_logger import RequestLogger
