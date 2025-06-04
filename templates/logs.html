@@ -320,24 +320,33 @@ function refreshLogs() {
 }
 
 async function clearLogs() {
-    if (confirm('Are you sure you want to clear all logs? This action cannot be undone.')) {
+    if (confirm('Вы уверены, что хотите очистить все логи? Это действие необратимо.')) {
         try {
+            console.log('Sending DELETE request to clear logs...');
             const response = await fetch('/mcp/logs/clear', {
                 method: 'DELETE',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
                 }
             });
             
+            console.log('Response status:', response.status);
+            
             if (response.ok) {
+                const result = await response.json();
+                console.log('Clear logs result:', result);
+                alert(`Успешно очищено ${result.message}`);
                 // Reload the page to show empty logs
                 location.reload();
             } else {
                 const error = await response.json();
-                alert(`Error clearing logs: ${error.message || 'Unknown error'}`);
+                console.error('Clear logs error:', error);
+                alert(`Ошибка при очистке логов: ${error.message || error.error || 'Неизвестная ошибка'}`);
             }
         } catch (error) {
-            alert(`Error clearing logs: ${error.message}`);
+            console.error('Clear logs exception:', error);
+            alert(`Ошибка при очистке логов: ${error.message}`);
         }
     }
 }
