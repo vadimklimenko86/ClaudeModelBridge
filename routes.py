@@ -1,6 +1,7 @@
 import json
 import time
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
+import uuid
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, Response, stream_template
 from app import db
 from models import Tool, Resource, MCPLog
 from mcp_server import mcp_manager
@@ -75,19 +76,26 @@ def mcp_endpoint():
         response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
         return response
 
-    # Handle GET requests with informative response
+    # Handle GET requests - SSE for Claude.ai compatibility
     if request.method == 'GET':
-        return jsonify({
-            'service': 'MCP Server',
-            'version': '1.0.0',
-            'status': 'active',
-            'description': 'Model Context Protocol Server for Claude AI integration',
-            'endpoint': request.url,
-            'methods': ['POST'],
-            'documentation': '/api-docs',
-            'tools_count': len(mcp_manager.tools),
-            'resources_count': len(mcp_manager.resources)
-        })
+        accept_header = request.headers.get('Accept', '')
+        if 'text/event-stream' in accept_header:
+            # Claude.ai is requesting SSE connection
+            return mcp_sse_stream()
+        else:
+            # Regular GET request for info
+            return jsonify({
+                'service': 'MCP Server',
+                'version': '1.0.0',
+                'status': 'active',
+                'description': 'Model Context Protocol Server for Claude AI integration',
+                'endpoint': request.url,
+                'methods': ['POST'],
+                'documentation': '/api-docs',
+                'tools_count': len(mcp_manager.tools),
+                'resources_count': len(mcp_manager.resources),
+                'transport': 'http+sse'
+            })
 
     # Authenticate request for POST
     if not authenticate_request():
