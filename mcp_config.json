@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "flask-mcp-server": {
+      "command": "curl",
+      "args": [
+        "-X", "POST",
+        "-H", "Content-Type: application/json",
+        "-H", "Authorization: Bearer mcp-server-key",
+        "-d", "@-",
+        "http://localhost:5000/mcp/mcp"
+      ],
+      "env": {
+        "MCP_SERVER_URL": "http://localhost:5000/mcp/mcp",
+        "MCP_SERVER_KEY": "mcp-server-key"
+      }
+    }
+  }
+}

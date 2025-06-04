@@ -40,18 +40,49 @@ def logs():
 
 # API Routes
 
-@api_bp.route('/mcp', methods=['POST'])
+def authenticate_request():
+    """Authenticate MCP requests"""
+    # Check for API key in headers
+    api_key = request.headers.get('Authorization')
+    if api_key:
+        # Remove 'Bearer ' prefix if present
+        if api_key.startswith('Bearer '):
+            api_key = api_key[7:]
+        # For now, accept any non-empty API key - can be configured later
+        return True
+    
+    # Also accept requests without auth for development
+    return True
+
+@api_bp.route('/mcp', methods=['POST', 'OPTIONS'])
 def mcp_endpoint():
     """Main MCP protocol endpoint"""
+    # Handle CORS preflight
+    if request.method == 'OPTIONS':
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
+        return response
+    
+    # Authenticate request
+    if not authenticate_request():
+        return jsonify({'error': {'code': -32000, 'message': 'Authentication required'}}), 401
+    
     try:
         request_data = request.get_json()
         if not request_data:
             return jsonify({'error': {'code': -32700, 'message': 'Parse error'}}), 400
         
         logger.info(f"MCP Request received: {request_data.get('method', 'unknown')}")
-        response = mcp_manager.handle_mcp_request(request_data)
-        logger.info(f"MCP Response ready: {response.get('error', {}).get('code', 'success')}")
-        return jsonify(response)
+        response_data = mcp_manager.handle_mcp_request(request_data)
+        logger.info(f"MCP Response ready: {response_data.get('error', {}).get('code', 'success')}")
+        
+        response = jsonify(response_data)
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
+        return response
     
     except Exception as e:
         logger.error(f"MCP endpoint error: {str(e)}")

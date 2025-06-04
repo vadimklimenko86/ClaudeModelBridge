@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "flask-mcp-server": {
+      "command": "python",
+      "args": ["-c", "import requests; import json; import sys; data = json.load(sys.stdin); response = requests.post('http://localhost:5000/mcp/mcp', json=data, headers={'Content-Type': 'application/json', 'Authorization': 'Bearer mcp-server-token'}); print(json.dumps(response.json()))"],
+      "env": {}
+    }
+  }
+}
