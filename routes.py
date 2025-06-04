@@ -1,4 +1,5 @@
 import json
+import time
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 from app import db
 from models import Tool, Resource, MCPLog
@@ -366,3 +367,165 @@ def jwks():
     response.headers['Content-Type'] = 'application/json'
     response.headers['Cache-Control'] = 'public, max-age=3600'
     return response
+
+# OAuth Authorization Endpoints
+@main_bp.route('/oauth/authorize', methods=['GET', 'POST'])
+def oauth_authorize():
+    """OAuth 2.0 Authorization Endpoint
+    
+    Handles authorization requests according to RFC 6749.
+    Supports authorization code and implicit grant flows.
+    """
+    if request.method == 'GET':
+        # Authorization request - show consent page
+        client_id = request.args.get('client_id')
+        response_type = request.args.get('response_type')
+        redirect_uri = request.args.get('redirect_uri')
+        scope = request.args.get('scope', 'mcp:read')
+        state = request.args.get('state')
+        code_challenge = request.args.get('code_challenge')
+        code_challenge_method = request.args.get('code_challenge_method')
+        
+        # Validate required parameters
+        if not client_id or not response_type or not redirect_uri:
+            return jsonify({
+                'error': 'invalid_request',
+                'error_description': 'Missing required parameters: client_id, response_type, redirect_uri'
+            }), 400
+        
+        if response_type not in ['code', 'token']:
+            return jsonify({
+                'error': 'unsupported_response_type',
+                'error_description': 'Only code and token response types are supported'
+            }), 400
+        
+        # For demo purposes, auto-approve the authorization
+        # In production, this would show a consent page
+        if response_type == 'code':
+            # Authorization code flow
+            auth_code = f"auth_code_{int(time.time())}"
+            
+            # Build redirect URL with authorization code
+            redirect_params = {
+                'code': auth_code,
+                'state': state
+            }
+            if state:
+                redirect_params['state'] = state
+                
+            # In production, store code with expiration and client validation
+            redirect_url = f"{redirect_uri}?{'&'.join([f'{k}={v}' for k, v in redirect_params.items() if v])}"
+            
+        else:
+            # Implicit flow - return access token directly
+            access_token = f"access_token_{int(time.time())}"
+            
+            redirect_params = {
+                'access_token': access_token,
+                'token_type': 'Bearer',
+                'expires_in': '3600',
+                'scope': scope
+            }
+            if state:
+                redirect_params['state'] = state
+                
+            redirect_url = f"{redirect_uri}#{'&'.join([f'{k}={v}' for k, v in redirect_params.items() if v])}"
+        
+        return redirect(redirect_url)
+    
+    else:
+        # POST - Handle authorization approval/denial
+        action = request.form.get('action')
+        client_id = request.form.get('client_id')
+        redirect_uri = request.form.get('redirect_uri')
+        state = request.form.get('state')
+        
+        if action == 'approve':
+            # Generate authorization code
+            auth_code = f"auth_code_{int(time.time())}"
+            redirect_params = {'code': auth_code}
+            if state:
+                redirect_params['state'] = state
+            redirect_url = f"{redirect_uri}?{'&'.join([f'{k}={v}' for k, v in redirect_params.items()])}"
+        else:
+            # User denied authorization
+            redirect_params = {'error': 'access_denied'}
+            if state:
+                redirect_params['state'] = state
+            redirect_url = f"{redirect_uri}?{'&'.join([f'{k}={v}' for k, v in redirect_params.items()])}"
+        
+        return redirect(redirect_url)
+
+@main_bp.route('/oauth/token', methods=['POST'])
+def oauth_token():
+    """OAuth 2.0 Token Endpoint
+    
+    Exchanges authorization codes for access tokens.
+    Supports authorization_code and client_credentials grant types.
+    """
+    grant_type = request.form.get('grant_type') or (request.json.get('grant_type') if request.is_json and request.json else None)
+    
+    if not grant_type:
+        return jsonify({
+            'error': 'invalid_request',
+            'error_description': 'Missing grant_type parameter'
+        }), 400
+    
+    if grant_type == 'authorization_code':
+        code = request.form.get('code') or (request.json.get('code') if request.is_json and request.json else None)
+        client_id = request.form.get('client_id') or (request.json.get('client_id') if request.is_json and request.json else None)
+        redirect_uri = request.form.get('redirect_uri') or (request.json.get('redirect_uri') if request.is_json and request.json else None)
+        
+        if not code or not client_id:
+            return jsonify({
+                'error': 'invalid_request',
+                'error_description': 'Missing required parameters'
+            }), 400
+        
+        # In production, validate the authorization code
+        # For demo, accept any code that starts with 'auth_code_'
+        if not code.startswith('auth_code_'):
+            return jsonify({
+                'error': 'invalid_grant',
+                'error_description': 'Invalid authorization code'
+            }), 400
+        
+        # Generate access token
+        access_token = f"mcp_access_token_{int(time.time())}"
+        refresh_token = f"mcp_refresh_token_{int(time.time())}"
+        
+        return jsonify({
+            'access_token': access_token,
+            'token_type': 'Bearer',
+            'expires_in': 3600,
+            'refresh_token': refresh_token,
+            'scope': 'mcp:read mcp:write tools:execute'
+        })
+    
+    elif grant_type == 'client_credentials':
+        # Client credentials flow
+        client_id = request.form.get('client_id') or (request.json.get('client_id') if request.is_json and request.json else None)
+        client_secret = request.form.get('client_secret') or (request.json.get('client_secret') if request.is_json and request.json else None)
+        scope = request.form.get('scope') or (request.json.get('scope') if request.is_json and request.json else 'mcp:read')
+        
+        if not client_id:
+            return jsonify({
+                'error': 'invalid_client',
+                'error_description': 'Missing client_id'
+            }), 400
+        
+        # Generate machine-to-machine access token
+        access_token = f"mcp_m2m_token_{int(time.time())}"
+        
+        return jsonify({
+            'access_token': access_token,
+            'token_type': 'Bearer',
+            'expires_in': 3600,
+            'scope': scope
+        })
+    
+    else:
+        return jsonify({
+            'error': 'unsupported_grant_type',
+            'error_description': f'Grant type {grant_type} is not supported'
+        }), 400
