@@ -80,88 +80,106 @@ def mcp_endpoint():
     if request.method == 'GET':
         accept_header = request.headers.get('Accept', '')
         if 'text/event-stream' in accept_header:
-            # Claude.ai is requesting SSE connection - implement proper MCP HTTP+SSE transport
-            logger.info("Serving MCP HTTP+SSE stream for Claude.ai integration")
+            # Claude.ai SSE-based JSON-RPC communication
+            logger.info("Serving SSE JSON-RPC stream for Claude.ai")
             
-            def mcp_sse_generator():
-                # MCP HTTP+SSE transport: each message is a complete JSON-RPC message
-                # Start with handshake notification
-                handshake = {
-                    "jsonrpc": "2.0",
-                    "method": "notifications/initialized",
-                    "params": {}
-                }
-                yield f"data: {json.dumps(handshake)}\n\n"
-                
-                # Send server info when requested
-                server_info = {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "result": {
-                        "protocolVersion": "2025-03-26",
-                        "capabilities": {
-                            "tools": {"listChanged": True},
-                            "resources": {"subscribe": True, "listChanged": True},
-                            "logging": {},
-                            "prompts": {"listChanged": True}
-                        },
-                        "serverInfo": {
-                            "name": "Flask MCP Server",
-                            "version": "1.0.0"
+            def json_rpc_sse_stream():
+                try:
+                    # SSE JSON-RPC: Stream individual JSON-RPC messages
+                    # Each message is a complete standalone JSON-RPC call
+                    
+                    # Send initialization capabilities
+                    init_response = {
+                        "jsonrpc": "2.0",
+                        "id": None,
+                        "result": {
+                            "protocolVersion": "2025-03-26",
+                            "capabilities": {
+                                "tools": {"listChanged": True},
+                                "resources": {"subscribe": True, "listChanged": True},
+                                "logging": {},
+                                "prompts": {"listChanged": True}
+                            },
+                            "serverInfo": {
+                                "name": "Flask MCP Server",
+                                "version": "1.0.0"
+                            }
                         }
                     }
-                }
-                yield f"data: {json.dumps(server_info)}\n\n"
-                
-                # Send tools list
-                tools_list = {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "result": {
-                        "tools": [
-                            {
-                                "name": "echo",
-                                "description": "Echo back the input message",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "message": {
-                                            "type": "string",
-                                            "description": "Message to echo back"
-                                        }
-                                    },
-                                    "required": ["message"]
+                    yield f"data: {json.dumps(init_response)}\n\n"
+                    
+                    # Send available tools as separate message
+                    tools_response = {
+                        "jsonrpc": "2.0",
+                        "method": "tools/list",
+                        "result": {
+                            "tools": [
+                                {
+                                    "name": "echo",
+                                    "description": "Echo back the input message",
+                                    "inputSchema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "message": {
+                                                "type": "string",
+                                                "description": "Message to echo back"
+                                            }
+                                        },
+                                        "required": ["message"]
+                                    }
+                                },
+                                {
+                                    "name": "system_info",
+                                    "description": "Get system information",
+                                    "inputSchema": {
+                                        "type": "object",
+                                        "properties": {},
+                                        "required": []
+                                    }
+                                },
+                                {
+                                    "name": "calculator",
+                                    "description": "Perform basic mathematical calculations",
+                                    "inputSchema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "expression": {
+                                                "type": "string",
+                                                "description": "Mathematical expression to evaluate"
+                                            }
+                                        },
+                                        "required": ["expression"]
+                                    }
                                 }
-                            },
-                            {
-                                "name": "system_info",
-                                "description": "Get system information",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {},
-                                    "required": []
-                                }
-                            },
-                            {
-                                "name": "calculator",
-                                "description": "Perform basic mathematical calculations",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "expression": {
-                                            "type": "string",
-                                            "description": "Mathematical expression to evaluate"
-                                        }
-                                    },
-                                    "required": ["expression"]
-                                }
-                            }
-                        ]
+                            ]
+                        }
                     }
-                }
-                yield f"data: {json.dumps(tools_list)}\n\n"
+                    yield f"data: {json.dumps(tools_response)}\n\n"
+                    
+                    # Send ready notification
+                    ready_notification = {
+                        "jsonrpc": "2.0",
+                        "method": "notifications/ready",
+                        "params": {
+                            "status": "ready"
+                        }
+                    }
+                    yield f"data: {json.dumps(ready_notification)}\n\n"
+                    
+                except GeneratorExit:
+                    logger.info("Claude.ai SSE stream closed")
+                except Exception as e:
+                    logger.error(f"SSE JSON-RPC stream error: {e}")
+                    error_msg = {
+                        "jsonrpc": "2.0",
+                        "error": {
+                            "code": -32603,
+                            "message": f"Stream error: {str(e)}"
+                        }
+                    }
+                    yield f"data: {json.dumps(error_msg)}\n\n"
             
-            response = Response(mcp_sse_generator(), mimetype='text/event-stream')
+            response = Response(json_rpc_sse_stream(), mimetype='text/event-stream')
             response.headers.add('Access-Control-Allow-Origin', '*')
             response.headers.add('Access-Control-Allow-Headers', 'Authorization,Cache-Control,Content-Type')
             response.headers.add('Cache-Control', 'no-cache')
