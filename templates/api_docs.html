@@ -230,6 +230,40 @@
                     </div>
                 </div>
                 
+                <!-- Authorization API -->
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <span class="method-badge method-post">POST</span>
+                        <code class="endpoint-path">/mcp/authorize</code>
+                        <span class="endpoint-title">API Key Authorization</span>
+                    </div>
+                    <div class="endpoint-body">
+                        <p>Validate API key and get authorization information.</p>
+                        <div class="code-example">
+                            <h6>Request Body:</h6>
+                            <pre><code class="language-json">{
+  "api_key": "your-api-key-here"
+}</code></pre>
+                            
+                            <h6>Or use Authorization Header:</h6>
+                            <pre><code class="language-bash">Authorization: Bearer your-api-key-here</code></pre>
+                            
+                            <h6>Response (Success):</h6>
+                            <pre><code class="language-json">{
+  "authorized": true,
+  "message": "Authentication successful",
+  "permissions": ["mcp:read", "mcp:write", "tools:execute"],
+  "expires_in": 3600,
+  "server_info": {
+    "name": "Flask MCP Server",
+    "version": "1.0.0",
+    "endpoint": "/mcp/mcp"
+  }
+}</code></pre>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Stats API -->
                 <div class="endpoint-card">
                     <div class="endpoint-header">

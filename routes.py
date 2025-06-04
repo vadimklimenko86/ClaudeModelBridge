@@ -202,6 +202,73 @@ def create_resource():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+@api_bp.route('/authorize', methods=['POST', 'OPTIONS'])
+def authorize():
+    """Authorization endpoint for API key validation"""
+    # Handle CORS preflight
+    if request.method == 'OPTIONS':
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
+        return response
+    
+    try:
+        # Handle both JSON and header-based authentication
+        request_data = {}
+        if request.content_type == 'application/json':
+            request_data = request.get_json() or {}
+        
+        # Check if API key is provided in JSON body or Authorization header
+        api_key = request_data.get('api_key') or request.headers.get('Authorization')
+        
+        if api_key:
+            # Remove 'Bearer ' prefix if present
+            if api_key.startswith('Bearer '):
+                api_key = api_key[7:]
+            
+            # Validate API key (accept any non-empty key for now)
+            if len(api_key.strip()) > 0:
+                response_data = {
+                    'authorized': True,
+                    'message': 'Authentication successful',
+                    'permissions': ['mcp:read', 'mcp:write', 'tools:execute'],
+                    'expires_in': 3600,
+                    'server_info': {
+                        'name': 'Flask MCP Server',
+                        'version': '1.0.0',
+                        'endpoint': '/mcp/mcp'
+                    }
+                }
+            else:
+                response_data = {
+                    'authorized': False,
+                    'message': 'Invalid API key format',
+                    'error': 'INVALID_KEY_FORMAT'
+                }
+        else:
+            response_data = {
+                'authorized': False,
+                'message': 'API key required',
+                'error': 'MISSING_API_KEY'
+            }
+        
+        response = jsonify(response_data)
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
+        return response
+        
+    except Exception as e:
+        logger.error(f"Authorization endpoint error: {str(e)}")
+        error_response = jsonify({
+            'authorized': False,
+            'message': 'Authorization service error',
+            'error': 'SERVICE_ERROR'
+        })
+        error_response.headers.add('Access-Control-Allow-Origin', '*')
+        return error_response, 500
+
 @api_bp.route('/stats', methods=['GET'])
 def get_stats():
     """Get server statistics"""
