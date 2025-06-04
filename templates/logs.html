@@ -79,9 +79,9 @@
                             <tr>
                                 <th>Timestamp</th>
                                 <th>Method</th>
+                                <th>IP Client</th>
                                 <th>Status</th>
                                 <th>Duration</th>
-                                <th>Request ID</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -96,6 +96,9 @@
                                     <code class="method-badge">{{ log.method }}</code>
                                 </td>
                                 <td>
+                                    <span class="text-muted small">{{ log.ip_address or '-' }}</span>
+                                </td>
+                                <td>
                                     <span class="badge {% if log.status_code < 400 %}bg-success{% else %}bg-danger{% endif %}">
                                         {{ log.status_code }}
                                     </span>
@@ -104,9 +107,6 @@
                                     <span class="duration-badge {% if log.duration_ms > 1000 %}text-warning{% elif log.duration_ms > 5000 %}text-danger{% else %}text-success{% endif %}">
                                         {{ "%.0f"|format(log.duration_ms) }}ms
                                     </span>
-                                </td>
-                                <td>
-                                    <code class="request-id">{{ log.request_id[:12] }}...</code>
                                 </td>
                                 <td>
                                     <button class="btn btn-outline-primary btn-sm" 
@@ -319,10 +319,26 @@ function refreshLogs() {
     location.reload();
 }
 
-function clearLogs() {
+async function clearLogs() {
     if (confirm('Are you sure you want to clear all logs? This action cannot be undone.')) {
-        // In a real implementation, this would call an API to clear logs
-        alert('Clear logs functionality would be implemented here');
+        try {
+            const response = await fetch('/mcp/logs/clear', {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                // Reload the page to show empty logs
+                location.reload();
+            } else {
+                const error = await response.json();
+                alert(`Error clearing logs: ${error.message || 'Unknown error'}`);
+            }
+        } catch (error) {
+            alert(`Error clearing logs: ${error.message}`);
+        }
     }
 }
 

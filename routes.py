@@ -626,6 +626,30 @@ def health_check():
     })
 
 
+@api_bp.route('/logs/clear', methods=['DELETE'])
+def clear_logs():
+    """Clear all log entries from the database"""
+    try:
+        # Delete all log entries
+        deleted_count = MCPLog.query.delete()
+        db.session.commit()
+        
+        logger.info(f"Cleared {deleted_count} log entries")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully cleared {deleted_count} log entries'
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error clearing logs: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 # OAuth Authorization Server Discovery Endpoint (MCP Specification)
 @main_bp.route('/.well-known/oauth-authorization-server', methods=['GET'])
 def oauth_authorization_server():
