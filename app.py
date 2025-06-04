@@ -63,6 +63,21 @@ def create_app():
     from routes import main_bp, api_bp
     app.register_blueprint(main_bp)
     app.register_blueprint(api_bp, url_prefix='/mcp')
+    
+    # Register WebSocket handlers
+    from websocket_handlers import handle_mcp_message, handle_connect, handle_disconnect
+    
+    @socketio.on('connect')
+    def on_connect():
+        handle_connect()
+    
+    @socketio.on('disconnect')
+    def on_disconnect():
+        handle_disconnect()
+    
+    @socketio.on('mcp_message')
+    def on_mcp_message(data):
+        handle_mcp_message(data)
 
     with app.app_context():
         # Import models to ensure tables are created
