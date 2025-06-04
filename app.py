@@ -34,7 +34,10 @@ def create_app():
     
     # Initialize extensions
     db.init_app(app)
-    socketio.init_app(app, cors_allowed_origins="*")
+    socketio.init_app(app, cors_allowed_origins="*", 
+                     async_mode='threading', 
+                     logger=False, 
+                     engineio_logger=False)
     
     # Register routes
     from routes import main_bp, api_bp

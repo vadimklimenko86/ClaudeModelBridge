@@ -96,9 +96,15 @@ class WebSocketManager {
     
     connect() {
         try {
-            this.socket = io();
+            this.socket = io({
+                transports: ['websocket', 'polling'],
+                timeout: 5000,
+                forceNew: true,
+                reconnection: true,
+                reconnectionAttempts: 3,
+                reconnectionDelay: 1000
+            });
             this.setupEventListeners();
-            this.updateStatus('connected');
         } catch (error) {
             console.error('WebSocket connection failed:', error);
             this.updateStatus('disconnected');

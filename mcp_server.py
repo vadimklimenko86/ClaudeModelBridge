@@ -75,13 +75,16 @@ class MCPManager:
             # Log the request/response
             self._log_request(request_id, method, request_data, response, 200, duration_ms)
             
-            # Emit real-time update
-            socketio.emit('mcp_activity', {
-                'type': 'request',
-                'method': method,
-                'duration_ms': duration_ms,
-                'timestamp': datetime.utcnow().isoformat()
-            })
+            # Emit real-time update (with error handling)
+            try:
+                socketio.emit('mcp_activity', {
+                    'type': 'request',
+                    'method': method,
+                    'duration_ms': duration_ms,
+                    'timestamp': datetime.utcnow().isoformat()
+                })
+            except Exception as e:
+                logger.debug(f"WebSocket emit failed: {str(e)}")
             
             return response
             
@@ -285,8 +288,11 @@ class MCPManager:
             # Reload tools
             self.load_tools()
             
-            # Emit update
-            socketio.emit('tools_updated', {'action': 'added', 'tool': tool.to_dict()})
+            # Emit update (with error handling)
+            try:
+                socketio.emit('tools_updated', {'action': 'added', 'tool': tool.to_dict()})
+            except Exception as e:
+                logger.debug(f"WebSocket emit failed: {str(e)}")
             
             return True
         except Exception as e:
