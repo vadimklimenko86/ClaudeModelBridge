@@ -328,6 +328,17 @@ def get_log_details(log_id):
     """Get detailed information for a specific log entry"""
     try:
         log = MCPLog.query.get_or_404(log_id)
+        
+        # Safe JSON parsing with fallback
+        def safe_json_parse(data):
+            if not data:
+                return None
+            try:
+                return json.loads(data)
+            except (json.JSONDecodeError, TypeError):
+                # Return raw string if JSON parsing fails
+                return {'raw_data': str(data)}
+        
         return jsonify({
             'id': log.id,
             'request_id': log.request_id,
@@ -335,8 +346,8 @@ def get_log_details(log_id):
             'status_code': log.status_code,
             'duration_ms': log.duration_ms,
             'timestamp': log.timestamp.isoformat(),
-            'request_data': json.loads(log.request_data) if log.request_data else None,
-            'response_data': json.loads(log.response_data) if log.response_data else None
+            'request_data': safe_json_parse(log.request_data),
+            'response_data': safe_json_parse(log.response_data)
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
