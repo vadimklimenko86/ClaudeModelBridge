@@ -62,8 +62,8 @@ def authenticate_request():
     return True
 
 
-@api_bp.route('/mcp', methods=['POST', 'OPTIONS'])
-@api_bp.route('/', methods=['POST', 'OPTIONS'])
+@api_bp.route('/mcp', methods=['GET', 'POST', 'OPTIONS'])
+@api_bp.route('/', methods=['GET', 'POST', 'OPTIONS'])
 def mcp_endpoint():
     """Main MCP protocol endpoint"""
     # Handle CORS preflight
@@ -72,10 +72,24 @@ def mcp_endpoint():
         response.headers.add('Access-Control-Allow-Origin', '*')
         response.headers.add('Access-Control-Allow-Headers',
                              'Content-Type,Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
         return response
 
-    # Authenticate request
+    # Handle GET requests with informative response
+    if request.method == 'GET':
+        return jsonify({
+            'service': 'MCP Server',
+            'version': '1.0.0',
+            'status': 'active',
+            'description': 'Model Context Protocol Server for Claude AI integration',
+            'endpoint': request.url,
+            'methods': ['POST'],
+            'documentation': '/api-docs',
+            'tools_count': len(mcp_manager.tools),
+            'resources_count': len(mcp_manager.resources)
+        })
+
+    # Authenticate request for POST
     if not authenticate_request():
         return jsonify(
             {'error': {
