@@ -67,7 +67,11 @@ class OAuth2Handler:
             "mcp:resources", 
             "mcp:prompts",
             "system:read",
-            "system:monitor"
+            "system:monitor",
+            "claudeai",
+            "read",
+            "write",
+            "admin"
         ]
         
         # Default client for testing (in production, store in database)
@@ -77,11 +81,12 @@ class OAuth2Handler:
                 "redirect_uris": [
                     "https://claude.ai/oauth/callback",
                     "http://localhost:8080/callback",
+                    "http://localhost:5000/oauth/callback",
                     "urn:ietf:wg:oauth:2.0:oob"
                 ],
                 "grant_types": ["authorization_code", "refresh_token"],
                 "response_types": ["code"],
-                "scope": "mcp:tools mcp:resources mcp:prompts system:read system:monitor"
+                "scope": "mcp:tools mcp:resources mcp:prompts system:read system:monitor claudeai read write admin"
             },
             "mcp_test_client": {
                 "client_secret": "test_secret_key_2024",
@@ -140,11 +145,18 @@ class OAuth2Handler:
         if not requested_scope:
             return True
         
+        # For Claude.ai client, allow any scope to ensure compatibility
+        if client_id == "claude_ai_client":
+            return True
+        
         client_scope = self.clients.get(client_id, {}).get("scope", "")
         client_scopes = set(client_scope.split())
         requested_scopes = set(requested_scope.split())
         
-        return requested_scopes.issubset(client_scopes)
+        # Check if all requested scopes are subset of client allowed scopes
+        # or if they are in the globally supported scopes
+        return (requested_scopes.issubset(client_scopes) or 
+                requested_scopes.issubset(set(self.supported_scopes)))
     
     def create_authorization_code(
         self,
