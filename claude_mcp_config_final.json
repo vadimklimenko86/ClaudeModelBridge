@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "flask-mcp-server": {
+      "command": "python",
+      "args": ["/home/runner/workspace/mcp_client.py"],
+      "cwd": "/home/runner/workspace"
+    }
+  }
+}
