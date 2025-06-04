@@ -5,9 +5,8 @@ import requests
 import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
-from app import db, socketio
+from app import db
 from models import Tool, Resource, MCPLog
-from flask_socketio import emit
 
 logger = logging.getLogger(__name__)
 
@@ -75,16 +74,8 @@ class MCPManager:
             # Log the request/response
             self._log_request(request_id, method, request_data, response, 200, duration_ms)
             
-            # Emit real-time update (with error handling)
-            try:
-                socketio.emit('mcp_activity', {
-                    'type': 'request',
-                    'method': method,
-                    'duration_ms': duration_ms,
-                    'timestamp': datetime.utcnow().isoformat()
-                })
-            except Exception as e:
-                logger.debug(f"WebSocket emit failed: {str(e)}")
+            # Log activity (WebSocket disabled for stability)
+            logger.debug(f"MCP Activity: {method} completed in {duration_ms:.2f}ms")
             
             return response
             
@@ -288,11 +279,8 @@ class MCPManager:
             # Reload tools
             self.load_tools()
             
-            # Emit update (with error handling)
-            try:
-                socketio.emit('tools_updated', {'action': 'added', 'tool': tool.to_dict()})
-            except Exception as e:
-                logger.debug(f"WebSocket emit failed: {str(e)}")
+            # Log tool update (WebSocket disabled for stability)
+            logger.debug(f"Tool registered: {tool.to_dict()}")
             
             return True
         except Exception as e:

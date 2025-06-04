@@ -2,7 +2,6 @@ import os
 import logging
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
-from flask_socketio import SocketIO
 from flask_cors import CORS
 from sqlalchemy.orm import DeclarativeBase
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -14,7 +13,6 @@ class Base(DeclarativeBase):
     pass
 
 db = SQLAlchemy(model_class=Base)
-socketio = SocketIO()
 
 def create_app():
     # Create the app
@@ -34,10 +32,11 @@ def create_app():
     
     # Initialize extensions
     db.init_app(app)
-    socketio.init_app(app, cors_allowed_origins="*", 
-                     async_mode='threading', 
-                     logger=False, 
-                     engineio_logger=False)
+    # Disable WebSocket temporarily to avoid resource issues
+    # socketio.init_app(app, cors_allowed_origins="*", 
+    #                  async_mode='threading', 
+    #                  logger=False, 
+    #                  engineio_logger=False)
     
     # Register routes
     from routes import main_bp, api_bp
