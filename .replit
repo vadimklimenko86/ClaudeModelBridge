@@ -2,7 +2,7 @@ modules = ["python-3.11", "postgresql-16", "python3"]
 
 [nix]
 channel = "stable-24_05"
-packages = ["iana-etc", "openssl", "postgresql"]
+packages = ["iana-etc", "libxcrypt", "openssl", "postgresql"]
 
 [deployment]
 deploymentTarget = "autoscale"
