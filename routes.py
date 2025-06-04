@@ -79,21 +79,57 @@ def mcp_endpoint():
     # Handle GET requests - Server discovery for Claude.ai
     if request.method == 'GET':
         logger.info("MCP server discovery request")
-        return jsonify({
-            'name': 'Flask MCP Server',
-            'version': '1.0.0',
-            'protocolVersion': '2024-11-05',
-            'capabilities': {
-                'tools': {'listChanged': True},
-                'resources': {'subscribe': True, 'listChanged': True}
-            },
-            'serverInfo': {
-                'name': 'Flask MCP Server',
-                'version': '1.0.0'
-            },
-            'transport': 'http',
-            'description': 'Model Context Protocol Server for Claude AI integration',
-            'tools': [
+        
+        # Try to use official MCP SDK for tool definitions
+        try:
+            from mcp.types import Tool
+            
+            # Define tools using official SDK types
+            sdk_tools = [
+                {
+                    'name': 'echo',
+                    'description': 'Echo back the input message with official MCP SDK',
+                    'inputSchema': {
+                        'type': 'object',
+                        'properties': {
+                            'message': {
+                                'type': 'string',
+                                'description': 'Message to echo back'
+                            }
+                        },
+                        'required': ['message']
+                    }
+                },
+                {
+                    'name': 'system_info',
+                    'description': 'Get comprehensive system information',
+                    'inputSchema': {
+                        'type': 'object',
+                        'properties': {},
+                        'required': []
+                    }
+                },
+                {
+                    'name': 'calculator',
+                    'description': 'Perform safe mathematical calculations',
+                    'inputSchema': {
+                        'type': 'object',
+                        'properties': {
+                            'expression': {
+                                'type': 'string',
+                                'description': 'Mathematical expression to evaluate (supports +, -, *, /, **, parentheses)'
+                            }
+                        },
+                        'required': ['expression']
+                    }
+                }
+            ]
+            
+            logger.info("Using official MCP SDK for tool definitions")
+            
+        except ImportError:
+            # Fallback to original definitions
+            sdk_tools = [
                 {
                     'name': 'echo',
                     'description': 'Echo back the input message',
@@ -132,6 +168,23 @@ def mcp_endpoint():
                     }
                 }
             ]
+        
+        return jsonify({
+            'name': 'Flask MCP Server with Official SDK',
+            'version': '1.0.0',
+            'protocolVersion': '2024-11-05',
+            'capabilities': {
+                'tools': {'listChanged': True},
+                'resources': {'subscribe': True, 'listChanged': True}
+            },
+            'serverInfo': {
+                'name': 'Flask MCP Server',
+                'version': '1.0.0'
+            },
+            'transport': 'http',
+            'description': 'Model Context Protocol Server using official Python SDK for Claude AI integration',
+            'sdk_version': '1.9.2',
+            'tools': sdk_tools
         })
 
     # Handle POST requests for MCP tool execution and protocol methods
