@@ -9,7 +9,6 @@ deploymentTarget = "autoscale"
 run = ["gunicorn", "--bind", "0.0.0.0:5000", "main:app"]
 
 [workflows]
-runButton = "Project"
 
 [[workflows.workflow]]
 name = "Project"
@@ -40,6 +39,15 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "uv add flask-socketio flask-cors requests"
+
+[[workflows.workflow]]
+name = "mcp_server"
+mode = "sequential"
+author = 39922616
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python3 http_server.py"
 
 [[ports]]
 localPort = 5000

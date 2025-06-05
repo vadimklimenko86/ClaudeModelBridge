@@ -637,8 +637,6 @@ def oauth_metadata():
 @app.route('/oauth/authorize')
 def oauth_authorize():
     """OAuth 2.0 Authorization Endpoint"""
-    logger.info("=== OAuth Authorization Request Started ===")
-    
     # Extract parameters
     response_type = request.args.get('response_type')
     client_id = request.args.get('client_id')
@@ -648,11 +646,10 @@ def oauth_authorize():
     code_challenge = request.args.get('code_challenge')
     code_challenge_method = request.args.get('code_challenge_method', 'plain')
 
-    logger.info(f"OAuth params: response_type='{response_type}', client_id='{client_id}', redirect_uri='{redirect_uri}', scope='{scope}'")
+    logger.log(logging.INFO, 'OAuth 2.0 Authorization Endpoint called')
 
     # Validate required parameters
     if not response_type or not client_id or not redirect_uri:
-        logger.error("Missing required parameters")
         return jsonify({
             "error": "invalid_request",
             "error_description": "Missing required parameters"
@@ -660,7 +657,6 @@ def oauth_authorize():
 
     # Validate response type
     if response_type != 'code':
-        logger.error(f"Unsupported response type: {response_type}")
         return jsonify({
             "error":
             "unsupported_response_type",
@@ -669,34 +665,26 @@ def oauth_authorize():
         }), 400
 
     # Validate client
-    logger.info("Validating client...")
     if not oauth_handler.validate_client(client_id):
-        logger.error(f"Client validation failed for: {client_id}")
         return jsonify({
             "error": "invalid_client",
-            "error_description": "Invalid client_id"
+            "error_description": "Wrong client_id"
         }), 400
 
     # Validate redirect URI
-    logger.info("Validating redirect URI...")
     if not oauth_handler.validate_redirect_uri(client_id, redirect_uri):
-        logger.error(f"Redirect URI validation failed for: {redirect_uri}")
         return jsonify({
             "error": "invalid_request",
             "error_description": "Invalid redirect_uri"
         }), 400
 
     # Validate scope
-    logger.info("Validating scope...")
     if not oauth_handler.validate_scope(scope, client_id):
-        logger.error(f"Scope validation failed for: {scope}")
         return jsonify({
             "error": "invalid_scope",
             "error_description": "Invalid scope"
         }), 400
 
-    logger.info("All validations passed, storing auth request in session")
-    
     # Store authorization request in session
     session['auth_request'] = {
         'client_id': client_id,
@@ -707,7 +695,6 @@ def oauth_authorize():
         'code_challenge_method': code_challenge_method
     }
 
-    logger.info("Redirecting to consent page")
     # For demo purposes, auto-approve (in production, show consent form)
     return redirect(url_for('oauth_consent'))
 
