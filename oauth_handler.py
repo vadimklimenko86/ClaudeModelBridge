@@ -261,9 +261,15 @@ class OAuth2Handler:
             del self.authorization_codes[code]
             return None
 
-        # Validate client
-        if not self.validate_client(client_id, client_secret):
-            return None
+        # Validate client - for Claude.ai dynamic clients, skip secret validation
+        if client_id.startswith("client_"):
+            # Claude.ai dynamic clients don't require secret validation
+            if not self.validate_client(client_id):
+                return None
+        else:
+            # Predefined clients require secret validation
+            if not self.validate_client(client_id, client_secret):
+                return None
 
         # Validate redirect URI
         if auth_code.redirect_uri != redirect_uri:
