@@ -90,7 +90,7 @@ class OAuth2Handler:
                 ["authorization_code", "refresh_token", "client_credentials"],
                 "response_types": ["code"],
                 "scope":
-                "mcp:tools mcp:resources mcp:prompts system:read system:monitor claudeai read write admin"
+                "mcp:tools mcp:resources mcp:prompts system:read system:monitor read write admin"
             },
             # String format for legacy compatibility
             "claude_ai_client": {
@@ -106,7 +106,7 @@ class OAuth2Handler:
                 ["authorization_code", "refresh_token", "client_credentials"],
                 "response_types": ["code"],
                 "scope":
-                "mcp:tools mcp:resources mcp:prompts system:read system:monitor claudeai read write admin"
+                "mcp:tools mcp:resources mcp:prompts system:read system:monitor read write admin"
             },
             # Test client with UUID format
             "660e8400-e29b-41d4-a716-446655440001": {
@@ -536,8 +536,8 @@ class OAuth2Handler:
     def get_authorization_server_metadata(self) -> Dict[str, Any]:
         """Get OAuth 2.0 authorization server metadata"""
         return {
-            "issuer":
-            "https://mcp-server.example.com",
+            #"issuer":
+            #"https://mcp-server.example.com",
             "authorization_endpoint":
             self.authorization_endpoint,
             "token_endpoint":
