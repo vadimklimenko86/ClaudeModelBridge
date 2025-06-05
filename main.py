@@ -639,14 +639,22 @@ def oauth_authorize():
     """OAuth 2.0 Authorization Endpoint"""
     # Extract parameters
     response_type = request.args.get('response_type')
-    client_id = request.args.get('client_id')
+    original_client_id = request.args.get('client_id')
     redirect_uri = request.args.get('redirect_uri')
     scope = request.args.get('scope', '')
     state = request.args.get('state')
     code_challenge = request.args.get('code_challenge')
     code_challenge_method = request.args.get('code_challenge_method', 'plain')
+    
+    # Convert Claude.ai dynamic client_id to internal format if needed
+    if original_client_id and original_client_id.startswith("client_"):
+        # Map Claude.ai dynamic client to our predefined UUID
+        client_id = "550e8400-e29b-41d4-a716-446655440000"  # Use our Claude.ai UUID
+        logger.info(f"Converted Claude.ai client_id '{original_client_id}' to '{client_id}'")
+    else:
+        client_id = original_client_id
 
-    logger.log(logging.INFO, 'OAuth 2.0 Authorization Endpoint called')
+    logger.log(logging.INFO, f'OAuth 2.0 Authorization Endpoint called with client_id: {client_id}')
 
     # Validate required parameters
     if not response_type or not client_id or not redirect_uri:
@@ -688,6 +696,7 @@ def oauth_authorize():
     # Store authorization request in session
     session['auth_request'] = {
         'client_id': client_id,
+        'original_client_id': original_client_id,
         'redirect_uri': redirect_uri,
         'scope': scope,
         'state': state,
@@ -808,11 +817,19 @@ def oauth_token():
         encoded_credentials = auth_header[6:]
         decoded_credentials = base64.b64decode(encoded_credentials).decode(
             'utf-8')
-        client_id, client_secret = decoded_credentials.split(':', 1)
+        original_client_id, client_secret = decoded_credentials.split(':', 1)
     else:
         # Get from form data
-        client_id = request.form.get('client_id')
+        original_client_id = request.form.get('client_id')
         client_secret = request.form.get('client_secret')
+    
+    # Convert Claude.ai dynamic client_id to internal format if needed
+    if original_client_id and original_client_id.startswith("client_"):
+        # Map Claude.ai dynamic client to our predefined UUID
+        client_id = "550e8400-e29b-41d4-a716-446655440000"  # Use our Claude.ai UUID
+        logger.info(f"Token endpoint: Converted Claude.ai client_id '{original_client_id}' to '{client_id}'")
+    else:
+        client_id = original_client_id
 
     grant_type = request.form.get('grant_type')
 
