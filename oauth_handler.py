@@ -10,9 +10,14 @@ import hashlib
 import base64
 import json
 import urllib.parse
+import logging
 from typing import Dict, Optional, Any
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -162,27 +167,39 @@ class OAuth2Handler:
                         client_id: str,
                         client_secret: Optional[str] = None) -> bool:
         """Validate client credentials"""
+        logger.debug(f"validate_client called with client_id='{client_id}', client_secret={'present' if client_secret else 'None'}")
+        
         # Normalize client_id - handle both UUID and string formats
         normalized_client_id = str(client_id).strip()
+        logger.debug(f"Normalized client_id: '{normalized_client_id}'")
 
         # Check if client exists in predefined clients
         if normalized_client_id in self.clients:
+            logger.debug(f"Client '{normalized_client_id}' found in predefined clients")
             if client_secret is not None:
-                return self.clients[normalized_client_id]["client_secret"] == client_secret
+                result = self.clients[normalized_client_id]["client_secret"] == client_secret
+                logger.debug(f"Secret validation result: {result}")
+                return result
+            logger.debug("No secret required for predefined client")
             return True
 
         # Accept Claude.ai dynamic client IDs that start with "client_"
         if normalized_client_id.startswith("client_"):
-            # For Claude.ai dynamic clients, allow without secret validation
+            logger.debug(f"Accepting Claude.ai dynamic client: '{normalized_client_id}'")
             return True
 
+        logger.debug(f"Client '{normalized_client_id}' not recognized")
         return False
 
     def validate_redirect_uri(self, client_id: str, redirect_uri: str) -> bool:
         """Validate redirect URI"""
+        logger.debug(f"validate_redirect_uri called with client_id='{client_id}', redirect_uri='{redirect_uri}'")
+        
         # Check predefined clients
         if client_id in self.clients:
-            return redirect_uri in self.clients[client_id]["redirect_uris"]
+            result = redirect_uri in self.clients[client_id]["redirect_uris"]
+            logger.debug(f"Predefined client redirect validation: {result}")
+            return result
         
         # For Claude.ai dynamic clients, allow common Claude.ai redirect URIs
         if client_id.startswith("client_"):
@@ -193,13 +210,19 @@ class OAuth2Handler:
                 "https://claude.anthropic.com/callback",
                 "urn:ietf:wg:oauth:2.0:oob"
             ]
-            return redirect_uri in allowed_claude_uris
+            result = redirect_uri in allowed_claude_uris
+            logger.debug(f"Claude.ai dynamic client redirect validation: {result}, allowed URIs: {allowed_claude_uris}")
+            return result
         
+        logger.debug(f"Redirect URI validation failed for client_id='{client_id}'")
         return False
 
     def validate_scope(self, requested_scope: str, client_id: str) -> bool:
         """Validate requested scope"""
+        logger.debug(f"validate_scope called with requested_scope='{requested_scope}', client_id='{client_id}'")
+        
         if not requested_scope:
+            logger.debug("Empty scope, allowing")
             return True
 
         # For Claude.ai clients (both UUID, string format, and dynamic client_ format), allow any scope
@@ -207,16 +230,23 @@ class OAuth2Handler:
             "550e8400-e29b-41d4-a716-446655440000", "claude_ai_client"
         ]
         if client_id in claude_clients or client_id.startswith("client_"):
+            logger.debug(f"Claude.ai client '{client_id}' detected, allowing all scopes")
             return True
 
         client_scope = self.clients.get(client_id, {}).get("scope", "")
         client_scopes = set(client_scope.split())
         requested_scopes = set(requested_scope.split())
+        
+        logger.debug(f"Client scopes: {client_scopes}")
+        logger.debug(f"Requested scopes: {requested_scopes}")
+        logger.debug(f"Supported scopes: {self.supported_scopes}")
 
         # Check if all requested scopes are subset of client allowed scopes
         # or if they are in the globally supported scopes
-        return (requested_scopes.issubset(client_scopes)
+        result = (requested_scopes.issubset(client_scopes)
                 or requested_scopes.issubset(set(self.supported_scopes)))
+        logger.debug(f"Scope validation result: {result}")
+        return result
 
     def create_authorization_code(self,
                                   client_id: str,
@@ -249,34 +279,44 @@ class OAuth2Handler:
             redirect_uri: str,
             code_verifier: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Exchange authorization code for access token"""
+        logger.info("=== Token Exchange Started ===")
+        logger.info(f"Token exchange params: code='{code}', client_id='{client_id}', redirect_uri='{redirect_uri}'")
 
         # Validate authorization code
         if code not in self.authorization_codes:
+            logger.error(f"Authorization code not found: {code}")
             return None
 
         auth_code = self.authorization_codes[code]
+        logger.info(f"Found auth code for client: {auth_code.client_id}")
 
         # Check expiration
         if time.time() > auth_code.expires_at:
+            logger.error(f"Authorization code expired: {code}")
             del self.authorization_codes[code]
             return None
 
         # Validate client - for Claude.ai dynamic clients, skip secret validation
+        logger.info("Validating client for token exchange...")
         if client_id.startswith("client_"):
-            # Claude.ai dynamic clients don't require secret validation
+            logger.info("Claude.ai dynamic client detected, skipping secret validation")
             if not self.validate_client(client_id):
+                logger.error(f"Claude.ai client validation failed: {client_id}")
                 return None
         else:
-            # Predefined clients require secret validation
+            logger.info("Predefined client detected, validating with secret")
             if not self.validate_client(client_id, client_secret):
+                logger.error(f"Predefined client validation failed: {client_id}")
                 return None
 
         # Validate redirect URI
         if auth_code.redirect_uri != redirect_uri:
+            logger.error(f"Redirect URI mismatch: expected={auth_code.redirect_uri}, got={redirect_uri}")
             return None
 
         # Validate client ID
         if auth_code.client_id != client_id:
+            logger.error(f"Client ID mismatch: expected={auth_code.client_id}, got={client_id}")
             return None
 
         # Validate PKCE if used
