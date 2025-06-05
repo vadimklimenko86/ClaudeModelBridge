@@ -160,38 +160,53 @@ class OAuth2Handler:
 
     def validate_client(self,
                         client_id: str,
-                        client_secret: str = None) -> bool:
+                        client_secret: Optional[str] = None) -> bool:
         """Validate client credentials"""
         # Normalize client_id - handle both UUID and string formats
         normalized_client_id = str(client_id).strip()
 
-        # Check if client exists
-        if normalized_client_id not in self.clients:
-            return False
+        # Check if client exists in predefined clients
+        if normalized_client_id in self.clients:
+            if client_secret is not None:
+                return self.clients[normalized_client_id]["client_secret"] == client_secret
+            return True
 
-        if client_secret is not None:
-            return self.clients[normalized_client_id][
-                "client_secret"] == client_secret
+        # Accept Claude.ai dynamic client IDs that start with "client_"
+        if normalized_client_id.startswith("client_"):
+            # For Claude.ai dynamic clients, allow without secret validation
+            return True
 
-        return True
+        return False
 
     def validate_redirect_uri(self, client_id: str, redirect_uri: str) -> bool:
         """Validate redirect URI"""
-        if client_id not in self.clients:
-            return False
-
-        return redirect_uri in self.clients[client_id]["redirect_uris"]
+        # Check predefined clients
+        if client_id in self.clients:
+            return redirect_uri in self.clients[client_id]["redirect_uris"]
+        
+        # For Claude.ai dynamic clients, allow common Claude.ai redirect URIs
+        if client_id.startswith("client_"):
+            allowed_claude_uris = [
+                "https://claude.ai/oauth/callback",
+                "https://claude.ai/callback", 
+                "https://claude.anthropic.com/oauth/callback",
+                "https://claude.anthropic.com/callback",
+                "urn:ietf:wg:oauth:2.0:oob"
+            ]
+            return redirect_uri in allowed_claude_uris
+        
+        return False
 
     def validate_scope(self, requested_scope: str, client_id: str) -> bool:
         """Validate requested scope"""
         if not requested_scope:
             return True
 
-        # For Claude.ai clients (both UUID and string format), allow any scope
+        # For Claude.ai clients (both UUID, string format, and dynamic client_ format), allow any scope
         claude_clients = [
             "550e8400-e29b-41d4-a716-446655440000", "claude_ai_client"
         ]
-        if client_id in claude_clients:
+        if client_id in claude_clients or client_id.startswith("client_"):
             return True
 
         client_scope = self.clients.get(client_id, {}).get("scope", "")
@@ -230,7 +245,7 @@ class OAuth2Handler:
             self,
             code: str,
             client_id: str,
-            client_secret: str,
+            client_secret: Optional[str],
             redirect_uri: str,
             code_verifier: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Exchange authorization code for access token"""
