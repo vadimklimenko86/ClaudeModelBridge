@@ -76,24 +76,8 @@ class OAuth2Handler:
 
         # Multiple client ID formats supported for maximum compatibility
         self.clients = {
-            # UUID format for strict validation environments
-            "550e8400-e29b-41d4-a716-446655440000": {
-                "client_secret":
-                "claude_secret_key_2024",
-                "redirect_uris": [
-                    "https://claude.ai/oauth/callback",
-                    "http://localhost:8080/callback",
-                    "http://localhost:5000/oauth/callback",
-                    "urn:ietf:wg:oauth:2.0:oob"
-                ],
-                "grant_types":
-                ["authorization_code", "refresh_token", "client_credentials"],
-                "response_types": ["code"],
-                "scope":
-                "mcp:tools mcp:resources mcp:prompts system:read system:monitor read write admin"
-            },
             # String format for legacy compatibility
-            "claude_ai_client": {
+            "client_1749051312": {
                 "client_secret":
                 "claude_secret_key_2024",
                 "redirect_uris": [
@@ -106,22 +90,10 @@ class OAuth2Handler:
                 ["authorization_code", "refresh_token", "client_credentials"],
                 "response_types": ["code"],
                 "scope":
-                "mcp:tools mcp:resources mcp:prompts system:read system:monitor read write admin"
+                "mcp:tools mcp:resources mcp:prompts system:read system:monitor read write admin claudeai"
             },
             # Test client with UUID format
-            "660e8400-e29b-41d4-a716-446655440001": {
-                "client_secret":
-                "test_secret_key_2024",
-                "redirect_uris": [
-                    "http://localhost:5000/oauth/callback",
-                    "urn:ietf:wg:oauth:2.0:oob"
-                ],
-                "grant_types":
-                ["authorization_code", "refresh_token", "client_credentials"],
-                "response_types": ["code"],
-                "scope":
-                "mcp:tools mcp:resources system:read"
-            },
+
             # Test client with string format
             "mcp_test_client": {
                 "client_secret":
@@ -134,7 +106,7 @@ class OAuth2Handler:
                 ["authorization_code", "refresh_token", "client_credentials"],
                 "response_types": ["code"],
                 "scope":
-                "mcp:tools mcp:resources system:read"
+                "mcp:tools mcp:resources system:read claudeai"
             }
         }
 
