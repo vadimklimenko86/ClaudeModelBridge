@@ -11,7 +11,9 @@ import os
 from pathlib import Path
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Import Flask for WSGI compatibility with gunicorn
@@ -27,7 +29,9 @@ from oauth_handler import oauth_handler
 
 # Create Flask app for gunicorn
 app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET", "mcp_oauth_secret_key_2024")
+app.secret_key = os.environ.get("SESSION_SECRET",
+                                "B7A2F038-5990-4DB5-B7BD-873E122A9BA1")
+
 app.config['SESSION_COOKIE_SECURE'] = False  # Allow HTTP for development
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
@@ -237,22 +241,31 @@ DASHBOARD_HTML = """
 </html>
 """
 
+
 @app.route('/')
 def dashboard():
     """Main dashboard"""
     return render_template_string(DASHBOARD_HTML)
 
+
 @app.route('/health')
 def health_check():
     """Health check endpoint"""
     return jsonify({
-        "status": "healthy",
-        "server": "Remote MCP Server",
-        "version": "1.0.0",
-        "sdk_version": "1.9.2",
-        "protocol_version": "2024-11-05",
-        "timestamp": time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())
+        "status":
+        "healthy",
+        "server":
+        "Remote MCP Server",
+        "version":
+        "1.0.0",
+        "sdk_version":
+        "1.9.2",
+        "protocol_version":
+        "2024-11-05",
+        "timestamp":
+        time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())
     })
+
 
 @app.route('/api/metrics')
 def get_metrics():
@@ -261,15 +274,19 @@ def get_metrics():
         cpu_percent = psutil.cpu_percent(interval=0.1)
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
-        
+
         return jsonify({
-            "cpu_percent": cpu_percent,
-            "memory_percent": memory.percent,
+            "cpu_percent":
+            cpu_percent,
+            "memory_percent":
+            memory.percent,
             "disk_percent": (disk.used / disk.total) * 100,
-            "timestamp": time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())
+            "timestamp":
+            time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/mcp/info')
 def mcp_info():
@@ -281,9 +298,16 @@ def mcp_info():
         "sdk_version": "1.9.2",
         "transport": ["http", "stdio"],
         "capabilities": {
-            "tools": {"listChanged": True},
-            "resources": {"subscribe": True, "listChanged": True},
-            "prompts": {"listChanged": True}
+            "tools": {
+                "listChanged": True
+            },
+            "resources": {
+                "subscribe": True,
+                "listChanged": True
+            },
+            "prompts": {
+                "listChanged": True
+            }
         },
         "endpoints": {
             "tools": "/mcp/tools",
@@ -295,103 +319,125 @@ def mcp_info():
         "official_sdk": True
     })
 
+
 @app.route('/mcp/tools')
 def list_tools():
     """List available MCP tools"""
-    return jsonify([
-        {
-            "name": "echo",
-            "description": "Echo back any message with timestamp and metadata",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "message": {"type": "string", "description": "Message to echo back"},
-                    "metadata": {"type": "object", "description": "Optional metadata to include"}
+    return jsonify([{
+        "name": "echo",
+        "description": "Echo back any message with timestamp and metadata",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "description": "Message to echo back"
                 },
-                "required": ["message"]
-            }
-        },
-        {
-            "name": "system_monitor",
-            "description": "Get comprehensive real-time system monitoring data",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "detail_level": {
-                        "type": "string",
-                        "enum": ["basic", "detailed", "full"],
-                        "description": "Level of detail for system information"
-                    },
-                    "include_processes": {"type": "boolean", "description": "Include running processes"}
+                "metadata": {
+                    "type": "object",
+                    "description": "Optional metadata to include"
                 }
-            }
-        },
-        {
-            "name": "calculator",
-            "description": "Advanced mathematical calculator with functions and constants",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "expression": {"type": "string", "description": "Mathematical expression to evaluate"},
-                    "precision": {"type": "integer", "description": "Number of decimal places", "default": 10}
+            },
+            "required": ["message"]
+        }
+    }, {
+        "name": "system_monitor",
+        "description": "Get comprehensive real-time system monitoring data",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "detail_level": {
+                    "type": "string",
+                    "enum": ["basic", "detailed", "full"],
+                    "description": "Level of detail for system information"
                 },
-                "required": ["expression"]
-            }
-        },
-        {
-            "name": "file_operations",
-            "description": "Safe file system operations (read, list, info)",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "operation": {"type": "string", "enum": ["read", "list", "info", "exists"]},
-                    "path": {"type": "string", "description": "File or directory path"},
-                    "encoding": {"type": "string", "default": "utf-8"}
-                },
-                "required": ["operation", "path"]
-            }
-        },
-        {
-            "name": "network_info",
-            "description": "Get network interface and connectivity information",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "include_stats": {"type": "boolean", "description": "Include network I/O statistics", "default": True}
+                "include_processes": {
+                    "type": "boolean",
+                    "description": "Include running processes"
                 }
             }
         }
-    ])
+    }, {
+        "name": "calculator",
+        "description":
+        "Advanced mathematical calculator with functions and constants",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "expression": {
+                    "type": "string",
+                    "description": "Mathematical expression to evaluate"
+                },
+                "precision": {
+                    "type": "integer",
+                    "description": "Number of decimal places",
+                    "default": 10
+                }
+            },
+            "required": ["expression"]
+        }
+    }, {
+        "name": "file_operations",
+        "description": "Safe file system operations (read, list, info)",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "operation": {
+                    "type": "string",
+                    "enum": ["read", "list", "info", "exists"]
+                },
+                "path": {
+                    "type": "string",
+                    "description": "File or directory path"
+                },
+                "encoding": {
+                    "type": "string",
+                    "default": "utf-8"
+                }
+            },
+            "required": ["operation", "path"]
+        }
+    }, {
+        "name": "network_info",
+        "description": "Get network interface and connectivity information",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "include_stats": {
+                    "type": "boolean",
+                    "description": "Include network I/O statistics",
+                    "default": True
+                }
+            }
+        }
+    }])
+
 
 @app.route('/mcp/resources')
 def list_resources():
     """List available MCP resources"""
-    return jsonify([
-        {
-            "uri": "system://monitor/realtime",
-            "name": "Real-time System Monitor",
-            "description": "Live system metrics and performance data",
-            "mimeType": "application/json"
-        },
-        {
-            "uri": "system://processes/active",
-            "name": "Active Processes",
-            "description": "Currently running system processes",
-            "mimeType": "application/json"
-        },
-        {
-            "uri": "system://network/interfaces",
-            "name": "Network Interfaces",
-            "description": "Network interface configuration and statistics",
-            "mimeType": "application/json"
-        },
-        {
-            "uri": "system://logs/recent",
-            "name": "Recent System Logs",
-            "description": "Recent system and application logs",
-            "mimeType": "text/plain"
-        }
-    ])
+    return jsonify([{
+        "uri": "system://monitor/realtime",
+        "name": "Real-time System Monitor",
+        "description": "Live system metrics and performance data",
+        "mimeType": "application/json"
+    }, {
+        "uri": "system://processes/active",
+        "name": "Active Processes",
+        "description": "Currently running system processes",
+        "mimeType": "application/json"
+    }, {
+        "uri": "system://network/interfaces",
+        "name": "Network Interfaces",
+        "description": "Network interface configuration and statistics",
+        "mimeType": "application/json"
+    }, {
+        "uri": "system://logs/recent",
+        "name": "Recent System Logs",
+        "description": "Recent system and application logs",
+        "mimeType": "text/plain"
+    }])
+
 
 @app.route('/mcp/call/<tool_name>', methods=['POST'])
 def call_tool(tool_name):
@@ -399,12 +445,12 @@ def call_tool(tool_name):
     try:
         from flask import request
         arguments = request.get_json() or {}
-        
+
         if tool_name == "echo":
             message = arguments.get("message", "")
             metadata = arguments.get("metadata", {})
             timestamp = time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())
-            
+
             response = {
                 "original_message": message,
                 "timestamp": timestamp,
@@ -415,19 +461,24 @@ def call_tool(tool_name):
                     "sdk_version": "1.9.2"
                 }
             }
-            
+
             return jsonify({
-                "tool": tool_name,
-                "result": [{"type": "text", "text": json.dumps(response, indent=2)}]
+                "tool":
+                tool_name,
+                "result": [{
+                    "type": "text",
+                    "text": json.dumps(response, indent=2)
+                }]
             })
-        
+
         elif tool_name == "system_monitor":
             detail_level = arguments.get("detail_level", "detailed")
             include_processes = arguments.get("include_processes", False)
-            
+
             # Get system information
             info = {
-                "timestamp": time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime()),
+                "timestamp": time.strftime('%Y-%m-%d %H:%M:%S UTC',
+                                           time.gmtime()),
                 "detail_level": detail_level,
                 "system": {
                     "platform": platform.system(),
@@ -447,41 +498,52 @@ def call_tool(tool_name):
                     "percentage": psutil.virtual_memory().percent
                 },
                 "disk": {
-                    "total": psutil.disk_usage('/').total,
-                    "used": psutil.disk_usage('/').used,
-                    "free": psutil.disk_usage('/').free,
-                    "percentage": (psutil.disk_usage('/').used / psutil.disk_usage('/').total) * 100
+                    "total":
+                    psutil.disk_usage('/').total,
+                    "used":
+                    psutil.disk_usage('/').used,
+                    "free":
+                    psutil.disk_usage('/').free,
+                    "percentage": (psutil.disk_usage('/').used /
+                                   psutil.disk_usage('/').total) * 100
                 }
             }
-            
+
             if include_processes:
                 processes = []
-                for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'status']):
+                for proc in psutil.process_iter(
+                    ['pid', 'name', 'cpu_percent', 'memory_percent',
+                     'status']):
                     try:
                         proc_info = proc.info
                         if proc_info['cpu_percent'] is not None:
                             processes.append(proc_info)
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
                         pass
-                
-                processes.sort(key=lambda x: x['cpu_percent'] or 0, reverse=True)
+
+                processes.sort(key=lambda x: x['cpu_percent'] or 0,
+                               reverse=True)
                 info["top_processes"] = processes[:20]
-            
+
             return jsonify({
-                "tool": tool_name,
-                "result": [{"type": "text", "text": json.dumps(info, indent=2)}]
+                "tool":
+                tool_name,
+                "result": [{
+                    "type": "text",
+                    "text": json.dumps(info, indent=2)
+                }]
             })
-        
+
         elif tool_name == "calculator":
             expression = arguments.get("expression", "")
             precision = arguments.get("precision", 10)
-            
+
             try:
                 # Simple safe evaluation for basic math
                 import ast
                 import operator
                 import math
-                
+
                 # Supported operations
                 ops = {
                     ast.Add: operator.add,
@@ -491,12 +553,13 @@ def call_tool(tool_name):
                     ast.Pow: operator.pow,
                     ast.USub: operator.neg,
                 }
-                
+
                 def safe_eval(node):
                     if isinstance(node, ast.Constant):
                         return node.value
                     elif isinstance(node, ast.BinOp):
-                        return ops[type(node.op)](safe_eval(node.left), safe_eval(node.right))
+                        return ops[type(node.op)](safe_eval(node.left),
+                                                  safe_eval(node.right))
                     elif isinstance(node, ast.UnaryOp):
                         return ops[type(node.op)](safe_eval(node.operand))
                     elif isinstance(node, ast.Name):
@@ -507,19 +570,21 @@ def call_tool(tool_name):
                         else:
                             raise ValueError(f"Undefined variable: {node.id}")
                     else:
-                        raise TypeError(f"Unsupported operation: {type(node).__name__}")
-                
+                        raise TypeError(
+                            f"Unsupported operation: {type(node).__name__}")
+
                 tree = ast.parse(expression, mode='eval')
                 result = safe_eval(tree.body)
-                
+
                 if isinstance(result, float):
                     if result.is_integer():
                         formatted_result = str(int(result))
                     else:
-                        formatted_result = f"{result:.{precision}f}".rstrip('0').rstrip('.')
+                        formatted_result = f"{result:.{precision}f}".rstrip(
+                            '0').rstrip('.')
                 else:
                     formatted_result = str(result)
-                
+
                 response = {
                     "expression": expression,
                     "result": formatted_result,
@@ -527,12 +592,16 @@ def call_tool(tool_name):
                     "type": type(result).__name__,
                     "precision": precision
                 }
-                
+
                 return jsonify({
-                    "tool": tool_name,
-                    "result": [{"type": "text", "text": json.dumps(response, indent=2)}]
+                    "tool":
+                    tool_name,
+                    "result": [{
+                        "type": "text",
+                        "text": json.dumps(response, indent=2)
+                    }]
                 })
-                
+
             except Exception as e:
                 error_response = {
                     "expression": expression,
@@ -542,21 +611,27 @@ def call_tool(tool_name):
                     "supported_constants": ["pi", "e"]
                 }
                 return jsonify({
-                    "tool": tool_name,
-                    "result": [{"type": "text", "text": json.dumps(error_response, indent=2)}]
+                    "tool":
+                    tool_name,
+                    "result": [{
+                        "type": "text",
+                        "text": json.dumps(error_response, indent=2)
+                    }]
                 })
-        
+
         else:
             return jsonify({"error": f"Unknown tool: {tool_name}"}), 400
-            
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 # OAuth 2.0 Authorization Server Metadata Discovery
 @app.route('/.well-known/oauth-authorization-server')
 def oauth_metadata():
     """OAuth 2.0 Authorization Server Metadata Discovery"""
     return jsonify(oauth_handler.get_authorization_server_metadata())
+
 
 # OAuth 2.0 Authorization Endpoint
 @app.route('/oauth/authorize')
@@ -570,27 +645,44 @@ def oauth_authorize():
     state = request.args.get('state')
     code_challenge = request.args.get('code_challenge')
     code_challenge_method = request.args.get('code_challenge_method', 'plain')
-    
+
     # Validate required parameters
     if not response_type or not client_id or not redirect_uri:
-        return jsonify({"error": "invalid_request", "error_description": "Missing required parameters"}), 400
-    
+        return jsonify({
+            "error": "invalid_request",
+            "error_description": "Missing required parameters"
+        }), 400
+
     # Validate response type
     if response_type != 'code':
-        return jsonify({"error": "unsupported_response_type", "error_description": "Only 'code' response type is supported"}), 400
-    
+        return jsonify({
+            "error":
+            "unsupported_response_type",
+            "error_description":
+            "Only 'code' response type is supported"
+        }), 400
+
     # Validate client
     if not oauth_handler.validate_client(client_id):
-        return jsonify({"error": "invalid_client", "error_description": "Invalid client_id"}), 400
-    
+        return jsonify({
+            "error": "invalid_client",
+            "error_description": "Invalid client_id"
+        }), 400
+
     # Validate redirect URI
     if not oauth_handler.validate_redirect_uri(client_id, redirect_uri):
-        return jsonify({"error": "invalid_request", "error_description": "Invalid redirect_uri"}), 400
-    
+        return jsonify({
+            "error": "invalid_request",
+            "error_description": "Invalid redirect_uri"
+        }), 400
+
     # Validate scope
     if not oauth_handler.validate_scope(scope, client_id):
-        return jsonify({"error": "invalid_scope", "error_description": "Invalid scope"}), 400
-    
+        return jsonify({
+            "error": "invalid_scope",
+            "error_description": "Invalid scope"
+        }), 400
+
     # Store authorization request in session
     session['auth_request'] = {
         'client_id': client_id,
@@ -600,17 +692,21 @@ def oauth_authorize():
         'code_challenge': code_challenge,
         'code_challenge_method': code_challenge_method
     }
-    
+
     # For demo purposes, auto-approve (in production, show consent form)
     return redirect(url_for('oauth_consent'))
+
 
 @app.route('/oauth/consent')
 def oauth_consent():
     """OAuth 2.0 User Consent Page"""
     auth_request = session.get('auth_request')
     if not auth_request:
-        return jsonify({"error": "invalid_request", "error_description": "No authorization request found"}), 400
-    
+        return jsonify({
+            "error": "invalid_request",
+            "error_description": "No authorization request found"
+        }), 400
+
     consent_html = f"""
     <!DOCTYPE html>
     <html>
@@ -644,15 +740,19 @@ def oauth_consent():
     """
     return consent_html
 
+
 @app.route('/oauth/authorize_decision', methods=['POST'])
 def oauth_authorize_decision():
     """Handle user authorization decision"""
     auth_request = session.get('auth_request')
     if not auth_request:
-        return jsonify({"error": "invalid_request", "error_description": "No authorization request found"}), 400
-    
+        return jsonify({
+            "error": "invalid_request",
+            "error_description": "No authorization request found"
+        }), 400
+
     decision = request.form.get('decision')
-    
+
     if decision == 'approve':
         # Generate authorization code
         code = oauth_handler.create_authorization_code(
@@ -663,33 +763,37 @@ def oauth_authorize_decision():
             challenge_method=auth_request.get('code_challenge_method'),
             user_id='demo_user'  # In production, use actual user ID
         )
-        
+
         # Build redirect URL
         redirect_url = auth_request['redirect_uri']
         params = {'code': code}
         if auth_request.get('state'):
             params['state'] = auth_request['state']
-        
+
         redirect_url += '?' + urllib.parse.urlencode(params)
-        
+
         # Clear session
         session.pop('auth_request', None)
-        
+
         return redirect(redirect_url)
-    
+
     else:
         # User denied authorization
         redirect_url = auth_request['redirect_uri']
-        params = {'error': 'access_denied', 'error_description': 'User denied authorization'}
+        params = {
+            'error': 'access_denied',
+            'error_description': 'User denied authorization'
+        }
         if auth_request.get('state'):
             params['state'] = auth_request['state']
-        
+
         redirect_url += '?' + urllib.parse.urlencode(params)
-        
+
         # Clear session
         session.pop('auth_request', None)
-        
+
         return redirect(redirect_url)
+
 
 # OAuth 2.0 Token Endpoint
 @app.route('/oauth/token', methods=['POST'])
@@ -700,72 +804,92 @@ def oauth_token():
     if auth_header and auth_header.startswith('Basic '):
         # Decode Basic auth
         encoded_credentials = auth_header[6:]
-        decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
+        decoded_credentials = base64.b64decode(encoded_credentials).decode(
+            'utf-8')
         client_id, client_secret = decoded_credentials.split(':', 1)
     else:
         # Get from form data
         client_id = request.form.get('client_id')
         client_secret = request.form.get('client_secret')
-    
+
     grant_type = request.form.get('grant_type')
-    
+
     if not grant_type:
-        return jsonify({"error": "invalid_request", "error_description": "Missing grant_type"}), 400
-    
+        return jsonify({
+            "error": "invalid_request",
+            "error_description": "Missing grant_type"
+        }), 400
+
     if grant_type == 'authorization_code':
         code = request.form.get('code')
         redirect_uri = request.form.get('redirect_uri')
         code_verifier = request.form.get('code_verifier')
-        
+
         if not code or not redirect_uri:
-            return jsonify({"error": "invalid_request", "error_description": "Missing required parameters"}), 400
-        
+            return jsonify({
+                "error": "invalid_request",
+                "error_description": "Missing required parameters"
+            }), 400
+
         token_response = oauth_handler.exchange_authorization_code(
             code=code,
             client_id=client_id,
             client_secret=client_secret,
             redirect_uri=redirect_uri,
-            code_verifier=code_verifier
-        )
-        
+            code_verifier=code_verifier)
+
         if not token_response:
-            return jsonify({"error": "invalid_grant", "error_description": "Invalid authorization code"}), 400
-        
+            return jsonify({
+                "error": "invalid_grant",
+                "error_description": "Invalid authorization code"
+            }), 400
+
         return jsonify(token_response)
-    
+
     elif grant_type == 'refresh_token':
         refresh_token = request.form.get('refresh_token')
-        
+
         if not refresh_token:
-            return jsonify({"error": "invalid_request", "error_description": "Missing refresh_token"}), 400
-        
+            return jsonify({
+                "error": "invalid_request",
+                "error_description": "Missing refresh_token"
+            }), 400
+
         token_response = oauth_handler.refresh_access_token(
             refresh_token=refresh_token,
             client_id=client_id,
-            client_secret=client_secret
-        )
-        
+            client_secret=client_secret)
+
         if not token_response:
-            return jsonify({"error": "invalid_grant", "error_description": "Invalid refresh token"}), 400
-        
+            return jsonify({
+                "error": "invalid_grant",
+                "error_description": "Invalid refresh token"
+            }), 400
+
         return jsonify(token_response)
-    
+
     elif grant_type == 'client_credentials':
         scope = request.form.get('scope', '')
-        
+
         token_response = oauth_handler.client_credentials_grant(
-            client_id=client_id,
-            client_secret=client_secret,
-            scope=scope
-        )
-        
+            client_id=client_id, client_secret=client_secret, scope=scope)
+
         if not token_response:
-            return jsonify({"error": "invalid_client", "error_description": "Invalid client credentials"}), 400
-        
+            return jsonify({
+                "error": "invalid_client",
+                "error_description": "Invalid client credentials"
+            }), 400
+
         return jsonify(token_response)
-    
+
     else:
-        return jsonify({"error": "unsupported_grant_type", "error_description": f"Grant type '{grant_type}' is not supported"}), 400
+        return jsonify({
+            "error":
+            "unsupported_grant_type",
+            "error_description":
+            f"Grant type '{grant_type}' is not supported"
+        }), 400
+
 
 # OAuth 2.0 Token Revocation Endpoint
 @app.route('/oauth/revoke', methods=['POST'])
@@ -775,23 +899,33 @@ def oauth_revoke():
     auth_header = request.headers.get('Authorization')
     if auth_header and auth_header.startswith('Basic '):
         encoded_credentials = auth_header[6:]
-        decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
+        decoded_credentials = base64.b64decode(encoded_credentials).decode(
+            'utf-8')
         client_id, client_secret = decoded_credentials.split(':', 1)
     else:
         client_id = request.form.get('client_id')
         client_secret = request.form.get('client_secret')
-    
+
     token = request.form.get('token')
-    
+
     if not token:
-        return jsonify({"error": "invalid_request", "error_description": "Missing token"}), 400
-    
+        return jsonify({
+            "error": "invalid_request",
+            "error_description": "Missing token"
+        }), 400
+
     success = oauth_handler.revoke_token(token, client_id, client_secret)
-    
+
     if success:
         return '', 200  # RFC 7009: successful revocation returns 200 with empty body
     else:
-        return jsonify({"error": "invalid_client", "error_description": "Invalid client credentials or token"}), 400
+        return jsonify({
+            "error":
+            "invalid_client",
+            "error_description":
+            "Invalid client credentials or token"
+        }), 400
+
 
 # OAuth 2.0 Token Introspection Endpoint
 @app.route('/oauth/introspect', methods=['POST'])
@@ -801,19 +935,25 @@ def oauth_introspect():
     auth_header = request.headers.get('Authorization')
     if auth_header and auth_header.startswith('Basic '):
         encoded_credentials = auth_header[6:]
-        decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
+        decoded_credentials = base64.b64decode(encoded_credentials).decode(
+            'utf-8')
         client_id, client_secret = decoded_credentials.split(':', 1)
     else:
         client_id = request.form.get('client_id')
         client_secret = request.form.get('client_secret')
-    
+
     token = request.form.get('token')
-    
+
     if not token:
-        return jsonify({"error": "invalid_request", "error_description": "Missing token"}), 400
-    
-    introspection_result = oauth_handler.introspect_token(token, client_id, client_secret)
+        return jsonify({
+            "error": "invalid_request",
+            "error_description": "Missing token"
+        }), 400
+
+    introspection_result = oauth_handler.introspect_token(
+        token, client_id, client_secret)
     return jsonify(introspection_result)
+
 
 # OAuth 2.0 Callback for testing
 @app.route('/oauth/callback')
@@ -822,7 +962,7 @@ def oauth_callback():
     code = request.args.get('code')
     state = request.args.get('state')
     error = request.args.get('error')
-    
+
     if error:
         return f"""
         <h2>Authorization Error</h2>
@@ -830,7 +970,7 @@ def oauth_callback():
         <p><strong>Description:</strong> {request.args.get('error_description', 'Unknown error')}</p>
         <p><strong>State:</strong> {state}</p>
         """
-    
+
     if code:
         return f"""
         <h2>Authorization Successful</h2>
@@ -838,42 +978,60 @@ def oauth_callback():
         <p><strong>State:</strong> {state}</p>
         <p>Use this code to exchange for an access token at the token endpoint.</p>
         """
-    
+
     return "No authorization code received", 400
+
 
 # Protected MCP endpoints with OAuth 2.0
 def require_oauth(scopes=None):
     """Decorator to require OAuth 2.0 authorization"""
+
     def decorator(f):
+
         def decorated_function(*args, **kwargs):
             auth_header = request.headers.get('Authorization')
             if not auth_header or not auth_header.startswith('Bearer '):
-                return jsonify({"error": "unauthorized", "error_description": "Missing or invalid access token"}), 401
-            
+                return jsonify({
+                    "error":
+                    "unauthorized",
+                    "error_description":
+                    "Missing or invalid access token"
+                }), 401
+
             access_token = auth_header[7:]  # Remove 'Bearer ' prefix
             token_obj = oauth_handler.validate_access_token(access_token)
-            
+
             if not token_obj:
-                return jsonify({"error": "invalid_token", "error_description": "Access token is invalid or expired"}), 401
-            
+                return jsonify({
+                    "error":
+                    "invalid_token",
+                    "error_description":
+                    "Access token is invalid or expired"
+                }), 401
+
             # Check scope if required
             if scopes:
                 token_scopes = set(token_obj.scope.split())
                 required_scopes = set(scopes)
-                
+
                 # Allow "claudeai" scope to access all MCP functions
                 if "claudeai" in token_scopes:
                     pass  # claudeai scope grants full access
                 elif not required_scopes.issubset(token_scopes):
-                    return jsonify({"error": "insufficient_scope", "error_description": "Insufficient scope"}), 403
-            
+                    return jsonify({
+                        "error": "insufficient_scope",
+                        "error_description": "Insufficient scope"
+                    }), 403
+
             # Store token info in request context
             request.oauth_token = token_obj
             return f(*args, **kwargs)
-        
+
         decorated_function.__name__ = f.__name__
         return decorated_function
+
     return decorator
+
 
 # Protected MCP endpoints
 @app.route('/mcp/protected/tools')
@@ -882,6 +1040,7 @@ def protected_list_tools():
     """List MCP tools (OAuth protected)"""
     return list_tools()
 
+
 @app.route('/mcp/protected/call/<tool_name>', methods=['POST'])
 @require_oauth(['mcp:tools'])
 def protected_call_tool(tool_name):
@@ -889,20 +1048,22 @@ def protected_call_tool(tool_name):
     arguments = request.get_json() or {}
     return call_tool(tool_name)
 
+
 @app.route('/mcp/protected/resources')
 @require_oauth(['mcp:resources'])
 def protected_list_resources():
     """List MCP resources (OAuth protected)"""
     return list_resources()
 
+
 if __name__ == "__main__":
     # Create necessary directories
     Path("templates").mkdir(exist_ok=True)
     Path("static").mkdir(exist_ok=True)
-    
+
     logger.info("Starting Remote MCP Server with OAuth 2.0")
     logger.info("Official Python SDK v1.9.2")
     logger.info("Protocol Version: 2024-11-05")
     logger.info("OAuth 2.0 Authorization Server ready")
-    
+
     app.run(host="0.0.0.0", port=5000, debug=True)
