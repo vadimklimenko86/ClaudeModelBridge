@@ -1,85 +1,40 @@
-#!/usr/bin/env python3
-"""
-OAuth 2.0 Authorization Handler for MCP Server
-Implements MCP specification for authorization
-"""
-
 import secrets
-import time
-import hashlib
 import base64
+import hashlib
 import json
-import urllib.parse
-import logging
-from typing import Dict, Optional, Any
-from dataclasses import dataclass
+import time
 from datetime import datetime, timedelta
-
-# Set up logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-
-@dataclass
-class AuthorizationCode:
-    """Authorization code data structure"""
-    code: str
-    client_id: str
-    redirect_uri: str
-    scope: str
-    challenge: Optional[str]
-    challenge_method: Optional[str]
-    expires_at: float
-    user_id: Optional[str] = None
+from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlencode, urlparse, parse_qs
+import jwt
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from flask import Flask, request, jsonify, redirect, render_template_string, session, url_for
 
 
-@dataclass
-class AccessToken:
-    """Access token data structure"""
-    token: str
-    client_id: str
-    scope: str
-    expires_at: float
-    refresh_token: Optional[str] = None
-    user_id: Optional[str] = None
+class OAuth2Client:
+    """Класс для представления OAuth 2.0 клиента"""
+
+    def __init__(self,
+                 client_id: str,
+                 client_secret: str,
+                 redirect_uris: List[str],
+                 name: str,
+                 scopes: List[str] = None):
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.redirect_uris = redirect_uris
+        self.name = name
+        self.scopes = scopes or ['openid', 'profile', 'email']
+        self.created_at = datetime.utcnow()
 
 
 class OAuth2Handler:
-    """OAuth 2.0 handler for MCP server authorization"""
+    """Полная реализация OAuth 2.0 Authorization Server"""
 
-    def __init__(self):
-        # In-memory storage (use database in production)
-        self.authorization_codes: Dict[str, AuthorizationCode] = {}
-        self.access_tokens: Dict[str, AccessToken] = {}
-        self.refresh_tokens: Dict[str,
-                                  str] = {}  # refresh_token -> access_token
-
-        # OAuth 2.0 configuration
-        self.authorization_endpoint = "/oauth/authorize"
-        self.token_endpoint = "/oauth/token"
-        self.revocation_endpoint = "/oauth/revoke"
-        self.introspection_endpoint = "/oauth/introspect"
-
-        # Supported grant types
-        self.supported_grant_types = [
-            "authorization_code", "refresh_token", "client_credentials"
-        ]
-
-        # Supported response types
-        self.supported_response_types = ["code"]
-
-        # Supported scopes
-        self.supported_scopes = [
-            "mcp:tools", "mcp:resources", "mcp:prompts", "system:read",
-            "system:monitor", "claudeai", "read", "write", "admin"
-        ]
-
-        # Multiple client ID formats supported for maximum compatibility
-        self.clients = {
-            # String format for legacy compatibility
+    def __init__(self, app: Flask = None):
+        self.app = app
+        self.clients: Dict[str, OAuth2Client] = {
             "client_1749051312": {
                 "client_secret":
                 "claude_secret_key_2024",
@@ -94,471 +49,678 @@ class OAuth2Handler:
                 "response_types": ["code"],
                 "scope":
                 "mcp:tools mcp:resources mcp:prompts system:read system:monitor read write admin claudeai"
-            },
-            # Test client with UUID format
+            }
+        }
+        self.authorization_codes: Dict[str, dict] = {}
+        self.access_tokens: Dict[str, dict] = {}
+        self.refresh_tokens: Dict[str, dict] = {}
 
-            # Test client with string format
-            "mcp_test_client": {
-                "client_secret":
-                "test_secret_key_2024",
-                "redirect_uris": [
-                    "http://localhost:5000/oauth/callback",
-                    "urn:ietf:wg:oauth:2.0:oob"
-                ],
-                "grant_types":
-                ["authorization_code", "refresh_token", "client_credentials"],
-                "response_types": ["code"],
-                "scope":
-                "mcp:tools mcp:resources system:read claudeai"
+        # Генерируем RSA ключи для JWT
+        self._generate_keys()
+
+        # Пользователи (в реальном приложении это должно быть в БД)
+        self.users = {
+            'user@example.com': {
+                'id': '1',
+                'email': 'user@example.com',
+                'name': 'Test User',
+                'password': 'password123'  # В реальности должен быть хеш
             }
         }
 
-    def generate_authorization_code(self) -> str:
-        """Generate secure authorization code"""
-        return secrets.token_urlsafe(32)
-
-    def generate_access_token(self) -> str:
-        """Generate secure access token"""
-        return secrets.token_urlsafe(32)
-
-    def generate_refresh_token(self) -> str:
-        """Generate secure refresh token"""
-        return secrets.token_urlsafe(32)
-
-    def verify_pkce_challenge(self, verifier: str, challenge: str,
-                              method: str) -> bool:
-        """Verify PKCE code challenge"""
-        if method == "plain":
-            return verifier == challenge
-        elif method == "S256":
-            # SHA256 hash and base64url encode
-            digest = hashlib.sha256(verifier.encode()).digest()
-            challenge_computed = base64.urlsafe_b64encode(
-                digest).decode().rstrip('=')
-            return challenge_computed == challenge
-        return False
-
-    def validate_client(self,
-                        client_id: str,
-                        client_secret: Optional[str] = None) -> bool:
-        """Validate client credentials"""
-        logger.info(
-            f"OAuth: validate_client called with client_id='{client_id}', client_secret={'present' if client_secret else 'None'}"
-        )
-
-        # Normalize client_id - handle both UUID and string formats
-        normalized_client_id = str(client_id).strip()
-        logger.info(f"OAuth: Normalized client_id: '{normalized_client_id}'")
-
-        # Check if client exists in predefined clients
-        if normalized_client_id in self.clients:
-            logger.info(
-                f"OAuth: Client '{normalized_client_id}' found in predefined clients")
-            if client_secret is not None:
-                result = self.clients[normalized_client_id][
-                    "client_secret"] == client_secret
-                logger.info(f"OAuth: Secret validation result: {result}")
-                return result
-            logger.info("OAuth: No secret required for predefined client")
-            return True
-
-        # Accept Claude.ai dynamic client IDs that start with "client_"
-        if normalized_client_id.startswith("client_"):
-            logger.info(
-                f"OAuth: Accepting Claude.ai dynamic client: '{normalized_client_id}'"
-            )
-            return True
-
-        logger.warning(f"OAuth: Client '{normalized_client_id}' not recognized")
-        return False
-
-    def validate_redirect_uri(self, client_id: str, redirect_uri: str) -> bool:
-        """Validate redirect URI"""
-        logger.debug(
-            f"validate_redirect_uri called with client_id='{client_id}', redirect_uri='{redirect_uri}'"
-        )
-
-        # Check predefined clients
-        if client_id in self.clients:
-            result = redirect_uri in self.clients[client_id]["redirect_uris"]
-            logger.debug(f"Predefined client redirect validation: {result}")
-            return result
-
-        # For Claude.ai dynamic clients, allow common Claude.ai redirect URIs
-        if client_id.startswith("client_"):
-            allowed_claude_uris = [
-                "https://claude.ai/oauth/callback",
-                "https://claude.ai/callback",
-                "https://claude.anthropic.com/oauth/callback",
-                "https://claude.anthropic.com/callback",
-                "urn:ietf:wg:oauth:2.0:oob"
-            ]
-            result = redirect_uri in allowed_claude_uris
-            logger.debug(
-                f"Claude.ai dynamic client redirect validation: {result}, allowed URIs: {allowed_claude_uris}"
-            )
-            return result
-
-        logger.debug(
-            f"Redirect URI validation failed for client_id='{client_id}'")
-        return False
-
-    def validate_scope(self, requested_scope: str, client_id: str) -> bool:
-        """Validate requested scope"""
-        logger.info(
-            f"OAuth: validate_scope called with requested_scope='{requested_scope}', client_id='{client_id}'"
-        )
-
-        if not requested_scope:
-            logger.info("OAuth: Empty scope, allowing")
-            return True
-
-        # For Claude.ai clients (both UUID, string format, and dynamic client_ format), allow any scope
-        claude_clients = [
-            "550e8400-e29b-41d4-a716-446655440000", "claude_ai_client"
-        ]
-        if client_id in claude_clients or client_id.startswith("client_"):
-            logger.info(
-                f"OAuth: Claude.ai client '{client_id}' detected, allowing all scopes"
-            )
-            return True
-
-        client_scope = self.clients.get(client_id, {}).get("scope", "")
-        client_scopes = set(client_scope.split())
-        requested_scopes = set(requested_scope.split())
-
-        logger.info(f"OAuth: Client scopes: {client_scopes}")
-        logger.info(f"OAuth: Requested scopes: {requested_scopes}")
-        logger.info(f"OAuth: Supported scopes: {self.supported_scopes}")
-
-        # Check if all requested scopes are subset of client allowed scopes
-        # or if they are in the globally supported scopes
-        result = (requested_scopes.issubset(client_scopes)
-                  or requested_scopes.issubset(set(self.supported_scopes)))
-        logger.info(f"OAuth: Scope validation result: {result}")
-        return result
-
-    def create_authorization_code(self,
-                                  client_id: str,
-                                  redirect_uri: str,
-                                  scope: str,
-                                  challenge: Optional[str] = None,
-                                  challenge_method: Optional[str] = None,
-                                  user_id: Optional[str] = None) -> str:
-        """Create authorization code"""
-        code = self.generate_authorization_code()
-        expires_at = time.time() + 600  # 10 minutes
-
-        auth_code = AuthorizationCode(code=code,
-                                      client_id=client_id,
-                                      redirect_uri=redirect_uri,
-                                      scope=scope,
-                                      challenge=challenge,
-                                      challenge_method=challenge_method,
-                                      expires_at=expires_at,
-                                      user_id=user_id)
-
-        self.authorization_codes[code] = auth_code
-        return code
-
-    def exchange_authorization_code(
-            self,
-            code: str,
-            client_id: str,
-            client_secret: Optional[str],
-            redirect_uri: str,
-            code_verifier: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Exchange authorization code for access token"""
-        logger.info("=== Token Exchange Started ===")
-        logger.info(
-            f"Token exchange params: code='{code}', client_id='{client_id}', redirect_uri='{redirect_uri}'"
-        )
-
-        # Validate authorization code
-        if code not in self.authorization_codes:
-            logger.error(f"Authorization code not found: {code}")
-            return None
-
-        auth_code = self.authorization_codes[code]
-        logger.info(f"Found auth code for client: {auth_code.client_id}")
-
-        # Check expiration
-        if time.time() > auth_code.expires_at:
-            logger.error(f"Authorization code expired: {code}")
-            del self.authorization_codes[code]
-            return None
-
-        # Validate client - for Claude.ai dynamic clients, skip secret validation
-        logger.info("Validating client for token exchange...")
-        if client_id.startswith("client_"):
-            logger.info(
-                "Claude.ai dynamic client detected, skipping secret validation"
-            )
-            if not self.validate_client(client_id):
-                logger.error(
-                    f"Claude.ai client validation failed: {client_id}")
-                return None
-        else:
-            logger.info("Predefined client detected, validating with secret")
-            if not self.validate_client(client_id, client_secret):
-                logger.error(
-                    f"Predefined client validation failed: {client_id}")
-                return None
-
-        # Validate redirect URI
-        if auth_code.redirect_uri != redirect_uri:
-            logger.error(
-                f"Redirect URI mismatch: expected={auth_code.redirect_uri}, got={redirect_uri}"
-            )
-            return None
-
-        # Validate client ID
-        if auth_code.client_id != client_id:
-            logger.error(
-                f"Client ID mismatch: expected={auth_code.client_id}, got={client_id}"
-            )
-            return None
-
-        # Validate PKCE if used
-        if auth_code.challenge and code_verifier:
-            if not self.verify_pkce_challenge(
-                    code_verifier, auth_code.challenge,
-                    auth_code.challenge_method or "plain"):
-                return None
-
-        # Generate tokens
-        access_token = self.generate_access_token()
-        refresh_token = self.generate_refresh_token()
-        expires_in = 3600  # 1 hour
-        expires_at = time.time() + expires_in
-
-        # Store access token
-        token_obj = AccessToken(token=access_token,
-                                client_id=client_id,
-                                scope=auth_code.scope,
-                                expires_at=expires_at,
-                                refresh_token=refresh_token,
-                                user_id=auth_code.user_id)
-
-        self.access_tokens[access_token] = token_obj
-        self.refresh_tokens[refresh_token] = access_token
-
-        # Clean up authorization code
-        del self.authorization_codes[code]
-
-        return {
-            "access_token": access_token,
-            "token_type": "Bearer",
-            "expires_in": expires_in,
-            "refresh_token": refresh_token,
-            "scope": auth_code.scope
-        }
-
-    def refresh_access_token(self, refresh_token: str, client_id: str,
-                             client_secret: str) -> Optional[Dict[str, Any]]:
-        """Refresh access token"""
-
-        # Validate client
-        if not self.validate_client(client_id, client_secret):
-            return None
-
-        # Find access token by refresh token
-        if refresh_token not in self.refresh_tokens:
-            return None
-
-        old_access_token = self.refresh_tokens[refresh_token]
-        if old_access_token not in self.access_tokens:
-            return None
-
-        old_token_obj = self.access_tokens[old_access_token]
-
-        # Validate client ID
-        if old_token_obj.client_id != client_id:
-            return None
-
-        # Generate new tokens
-        new_access_token = self.generate_access_token()
-        new_refresh_token = self.generate_refresh_token()
-        expires_in = 3600  # 1 hour
-        expires_at = time.time() + expires_in
-
-        # Create new token object
-        new_token_obj = AccessToken(token=new_access_token,
-                                    client_id=client_id,
-                                    scope=old_token_obj.scope,
-                                    expires_at=expires_at,
-                                    refresh_token=new_refresh_token,
-                                    user_id=old_token_obj.user_id)
-
-        # Update storage
-        self.access_tokens[new_access_token] = new_token_obj
-        self.refresh_tokens[new_refresh_token] = new_access_token
-
-        # Clean up old tokens
-        del self.access_tokens[old_access_token]
-        del self.refresh_tokens[refresh_token]
-
-        return {
-            "access_token": new_access_token,
-            "token_type": "Bearer",
-            "expires_in": expires_in,
-            "refresh_token": new_refresh_token,
-            "scope": old_token_obj.scope
-        }
-
-    def client_credentials_grant(self, client_id: str, client_secret: str,
-                                 scope: str) -> Optional[Dict[str, Any]]:
-        """Client credentials grant"""
-
-        # Validate client
-        if not self.validate_client(client_id, client_secret):
-            return None
-
-        # Validate scope
-        if not self.validate_scope(scope, client_id):
-            return None
-
-        # Generate access token
-        access_token = self.generate_access_token()
-        expires_in = 3600  # 1 hour
-        expires_at = time.time() + expires_in
-
-        # Store access token
-        token_obj = AccessToken(token=access_token,
-                                client_id=client_id,
-                                scope=scope,
-                                expires_at=expires_at)
-
-        self.access_tokens[access_token] = token_obj
-
-        return {
-            "access_token": access_token,
-            "token_type": "Bearer",
-            "expires_in": expires_in,
-            "scope": scope
-        }
-
-    def validate_access_token(self,
-                              access_token: str) -> Optional[AccessToken]:
-        """Validate access token"""
-        if access_token not in self.access_tokens:
-            return None
-
-        token_obj = self.access_tokens[access_token]
-
-        # Check expiration
-        if time.time() > token_obj.expires_at:
-            # Clean up expired token
-            if token_obj.refresh_token:
-                self.refresh_tokens.pop(token_obj.refresh_token, None)
-            del self.access_tokens[access_token]
-            return None
-
-        return token_obj
-
-    def revoke_token(self, token: str, client_id: str,
-                     client_secret: str) -> bool:
-        """Revoke access or refresh token"""
-
-        # Validate client
-        if not self.validate_client(client_id, client_secret):
-            return False
-
-        # Try to revoke as access token
-        if token in self.access_tokens:
-            token_obj = self.access_tokens[token]
-            if token_obj.client_id == client_id:
-                # Clean up refresh token too
-                if token_obj.refresh_token:
-                    self.refresh_tokens.pop(token_obj.refresh_token, None)
-                del self.access_tokens[token]
-                return True
-
-        # Try to revoke as refresh token
-        if token in self.refresh_tokens:
-            access_token = self.refresh_tokens[token]
-            if access_token in self.access_tokens:
-                token_obj = self.access_tokens[access_token]
-                if token_obj.client_id == client_id:
-                    del self.access_tokens[access_token]
-                    del self.refresh_tokens[token]
-                    return True
-
-        return False
-
-    def introspect_token(self, token: str, client_id: str,
-                         client_secret: str) -> Dict[str, Any]:
-        """Introspect token"""
-
-        # Validate client
-        if not self.validate_client(client_id, client_secret):
-            return {"active": False}
-
-        token_obj = self.validate_access_token(token)
-        if not token_obj:
-            return {"active": False}
-
-        return {
-            "active": True,
-            "client_id": token_obj.client_id,
-            "scope": token_obj.scope,
-            "exp": int(token_obj.expires_at),
-            "iat": int(token_obj.expires_at - 3600),  # Issued 1 hour ago
-            "token_type": "Bearer",
-            "sub": token_obj.user_id
-        }
-
-    def get_authorization_server_metadata(self) -> Dict[str, Any]:
-        """Get OAuth 2.0 authorization server metadata"""
-        return {
-            #"issuer":
-            #"https://mcp-server.example.com",
+        if app:
+            self.init_app(app)
+
+    def _generate_keys(self):
+        """Генерация RSA ключей для подписи JWT"""
+        self.private_key = rsa.generate_private_key(public_exponent=65537,
+                                                    key_size=2048)
+        self.public_key = self.private_key.public_key()
+
+        # Для JWKS
+        self.key_id = secrets.token_urlsafe(8)
+
+    def init_app(self, app: Flask):
+        """Инициализация Flask приложения с OAuth endpoints"""
+        self.app = app
+        self._register_routes()
+
+    def _register_routes(self):
+        """Регистрация всех OAuth 2.0 endpoints"""
+
+        # Discovery endpoint
+        @self.app.route('/.well-known/oauth-authorization-server')
+        def oauth_metadata():
+            return self.get_authorization_server_metadata()
+
+        # JWKS endpoint
+        @self.app.route('/.well-known/jwks.json')
+        def jwks():
+            return self.get_jwks()
+
+        # Authorization endpoint
+        @self.app.route('/oauth/authorize')
+        def authorize():
+            return self.handle_authorization_request()
+
+        # Authorization form submission
+        @self.app.route('/oauth/authorize', methods=['POST'])
+        def authorize_post():
+            return self.handle_authorization_submit()
+
+        # Token endpoint
+        @self.app.route('/oauth/token', methods=['POST'])
+        def token():
+            return self.handle_token_request()
+
+        # Userinfo endpoint
+        @self.app.route('/oauth/userinfo')
+        def userinfo():
+            return self.handle_userinfo_request()
+
+        # Client registration endpoint
+        @self.app.route('/oauth/register', methods=['POST'])
+        def register_client():
+            return self.handle_client_registration()
+
+        # Login page
+        @self.app.route('/login')
+        def login_page():
+            return self.show_login_page()
+
+        # Login form submission
+        @self.app.route('/login', methods=['POST'])
+        def login_submit():
+            return self.handle_login()
+
+    def get_authorization_server_metadata(self):
+        """RFC 8414 - OAuth 2.0 Authorization Server Metadata"""
+        issuer = request.url_root.rstrip('/')
+
+        metadata = {
+            "issuer":
+            issuer,
             "authorization_endpoint":
-            self.authorization_endpoint,
+            f"{issuer}/oauth/authorize",
             "token_endpoint":
-            self.token_endpoint,
-            "revocation_endpoint":
-            self.revocation_endpoint,
-            "introspection_endpoint":
-            self.introspection_endpoint,
-            "response_types_supported":
-            self.supported_response_types,
+            f"{issuer}/oauth/token",
+            "userinfo_endpoint":
+            f"{issuer}/oauth/userinfo",
+            "jwks_uri":
+            f"{issuer}/.well-known/jwks.json",
+            "registration_endpoint":
+            f"{issuer}/oauth/register",
+            "scopes_supported": ["openid", "profile", "email"],
+            "response_types_supported": ["code", "id_token", "token"],
+            "response_modes_supported": ["query", "fragment", "form_post"],
             "grant_types_supported":
-            self.supported_grant_types,
-            "scopes_supported":
-            self.supported_scopes,
+            ["authorization_code", "implicit", "refresh_token"],
+            "subject_types_supported": ["public"],
+            "id_token_signing_alg_values_supported": ["RS256"],
             "token_endpoint_auth_methods_supported":
             ["client_secret_basic", "client_secret_post"],
-            "code_challenge_methods_supported": ["plain", "S256"],
-            "revocation_endpoint_auth_methods_supported":
-            ["client_secret_basic", "client_secret_post"],
-            "introspection_endpoint_auth_methods_supported":
-            ["client_secret_basic", "client_secret_post"]
+            "claims_supported":
+            ["sub", "iss", "aud", "exp", "iat", "name", "email"],
+            "code_challenge_methods_supported": ["S256", "plain"]
         }
 
-    def cleanup_expired_tokens(self):
-        """Clean up expired tokens (should be run periodically)"""
-        current_time = time.time()
+        return jsonify(metadata)
 
-        # Clean expired authorization codes
-        expired_codes = [
-            code for code, auth_code in self.authorization_codes.items()
-            if current_time > auth_code.expires_at
-        ]
-        for code in expired_codes:
-            del self.authorization_codes[code]
+    def get_jwks(self):
+        """JSON Web Key Set endpoint"""
+        public_numbers = self.public_key.public_numbers()
 
-        # Clean expired access tokens
-        expired_tokens = [
-            token for token, token_obj in self.access_tokens.items()
-            if current_time > token_obj.expires_at
-        ]
-        for token in expired_tokens:
-            token_obj = self.access_tokens[token]
-            if token_obj.refresh_token:
-                self.refresh_tokens.pop(token_obj.refresh_token, None)
-            del self.access_tokens[token]
+        # Конвертируем в base64url
+        def int_to_base64url(val):
+            val_bytes = val.to_bytes((val.bit_length() + 7) // 8, 'big')
+            return base64.urlsafe_b64encode(val_bytes).decode('ascii').rstrip(
+                '=')
 
+        jwks = {
+            "keys": [{
+                "kty": "RSA",
+                "use": "sig",
+                "kid": self.key_id,
+                "alg": "RS256",
+                "n": int_to_base64url(public_numbers.n),
+                "e": int_to_base64url(public_numbers.e)
+            }]
+        }
 
-# Global OAuth handler instance
-oauth_handler = OAuth2Handler()
+        return jsonify(jwks)
+
+    def handle_authorization_request(self):
+        """Обработка authorization request"""
+        client_id = request.args.get('client_id')
+        redirect_uri = request.args.get('redirect_uri')
+        response_type = request.args.get('response_type')
+        scope = request.args.get('scope', 'openid')
+        state = request.args.get('state')
+        code_challenge = request.args.get('code_challenge')
+        code_challenge_method = request.args.get('code_challenge_method',
+                                                 'S256')
+
+        # Валидация клиента
+        if not client_id or client_id not in self.clients:
+            return jsonify({"error": "invalid_client"}), 400
+
+        client = self.clients[client_id]
+
+        # Валидация redirect_uri
+        #if redirect_uri not in client.redirect_uris:
+        #    return jsonify({"error": "invalid_redirect_uri"}), 400
+
+        # Валидация response_type
+        if response_type not in ['code', 'token', 'id_token']:
+            return self._error_redirect(redirect_uri,
+                                        "unsupported_response_type", state)
+
+        # Проверка авторизации пользователя
+        if 'user_id' not in session:
+            # Сохраняем параметры для возврата после логина
+            session['oauth_params'] = request.args.to_dict()
+            return redirect(url_for('login_page'))
+
+        # Генерируем authorization code
+        auth_code = secrets.token_urlsafe(32)
+
+        self.authorization_codes[auth_code] = {
+            'client_id': client_id,
+            'user_id': session['user_id'],
+            'redirect_uri': redirect_uri,
+            'scope': scope,
+            'code_challenge': code_challenge,
+            'code_challenge_method': code_challenge_method,
+            'expires_at': time.time() + 600,  # 10 минут
+            'used': False
+        }
+
+        # Формируем URL для редиректа
+        params = {'code': auth_code}
+        if state:
+            params['state'] = state
+
+        redirect_url = f"{redirect_uri}?{urlencode(params)}"
+        return redirect(redirect_url)
+
+        # Показываем страницу согласия
+        return self._show_consent_page(client, scope, redirect_uri, state,
+                                       code_challenge, code_challenge_method)
+
+    def handle_authorization_submit(self):
+        """Обработка согласия пользователя"""
+        if 'user_id' not in session:
+            return jsonify({"error": "unauthorized"}), 401
+
+        client_id = request.form.get('client_id')
+        redirect_uri = request.form.get('redirect_uri')
+        scope = request.form.get('scope')
+        state = request.form.get('state')
+        code_challenge = request.form.get('code_challenge')
+        code_challenge_method = request.form.get('code_challenge_method')
+        consent = request.form.get('consent')
+
+        if consent != 'approve':
+            return self._error_redirect(redirect_uri, "access_denied", state)
+
+        # Генерируем authorization code
+        auth_code = secrets.token_urlsafe(32)
+
+        self.authorization_codes[auth_code] = {
+            'client_id': client_id,
+            'user_id': session['user_id'],
+            'redirect_uri': redirect_uri,
+            'scope': scope,
+            'code_challenge': code_challenge,
+            'code_challenge_method': code_challenge_method,
+            'expires_at': time.time() + 600,  # 10 минут
+            'used': False
+        }
+
+        # Формируем URL для редиректа
+        params = {'code': auth_code}
+        if state:
+            params['state'] = state
+
+        redirect_url = f"{redirect_uri}?{urlencode(params)}"
+        return redirect(redirect_url)
+
+    def handle_token_request(self):
+        """Обработка token request"""
+        grant_type = request.form.get('grant_type')
+
+        if grant_type == 'authorization_code':
+            return self._handle_authorization_code_grant()
+        elif grant_type == 'refresh_token':
+            return self._handle_refresh_token_grant()
+        else:
+            return jsonify({"error": "unsupported_grant_type"}), 400
+
+    def _handle_authorization_code_grant(self):
+        """Обработка authorization_code grant"""
+        code = request.form.get('code')
+        client_id = request.form.get('client_id')
+        client_secret = request.form.get('client_secret')
+        redirect_uri = request.form.get('redirect_uri')
+        code_verifier = request.form.get('code_verifier')
+
+        # Валидация клиента
+        if not self._authenticate_client(client_id, client_secret):
+            return jsonify({"error": "invalid_client"}), 401
+
+        # Валидация authorization code
+        if code not in self.authorization_codes:
+            return jsonify({"error": "invalid_grant"}), 400
+
+        code_data = self.authorization_codes[code]
+
+        # Проверки
+        if code_data['used'] or code_data['expires_at'] < time.time():
+            return jsonify({"error": "invalid_grant"}), 400
+
+        if code_data['client_id'] != client_id:
+            return jsonify({"error": "invalid_grant"}), 400
+
+        if code_data['redirect_uri'] != redirect_uri:
+            return jsonify({"error": "invalid_grant"}), 400
+
+        # PKCE проверка
+        if code_data.get('code_challenge'):
+            if not code_verifier:
+                return jsonify({"error": "invalid_request"}), 400
+
+            if not self._verify_pkce(
+                    code_verifier, code_data['code_challenge'],
+                    code_data.get('code_challenge_method', 'S256')):
+                return jsonify({"error": "invalid_grant"}), 400
+
+        # Помечаем код как использованный
+        code_data['used'] = True
+
+        # Генерируем токены
+        access_token = self._generate_access_token(code_data['user_id'],
+                                                   client_id,
+                                                   code_data['scope'])
+
+        refresh_token = self._generate_refresh_token(code_data['user_id'],
+                                                     client_id,
+                                                     code_data['scope'])
+
+        # ID Token для OpenID Connect
+        id_token = None
+        if 'openid' in code_data['scope']:
+            id_token = self._generate_id_token(code_data['user_id'], client_id,
+                                               access_token)
+
+        response = {
+            "access_token": access_token,
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "refresh_token": refresh_token,
+            "scope": code_data['scope']
+        }
+
+        if id_token:
+            response["id_token"] = id_token
+
+        return jsonify(response)
+
+    def _handle_refresh_token_grant(self):
+        """Обработка refresh_token grant"""
+        refresh_token = request.form.get('refresh_token')
+        client_id = request.form.get('client_id')
+        client_secret = request.form.get('client_secret')
+        scope = request.form.get('scope')
+
+        # Валидация клиента
+        if not self._authenticate_client(client_id, client_secret):
+            return jsonify({"error": "invalid_client"}), 401
+
+        # Валидация refresh token
+        if refresh_token not in self.refresh_tokens:
+            return jsonify({"error": "invalid_grant"}), 400
+
+        token_data = self.refresh_tokens[refresh_token]
+
+        if token_data['expires_at'] < time.time():
+            return jsonify({"error": "invalid_grant"}), 400
+
+        if token_data['client_id'] != client_id:
+            return jsonify({"error": "invalid_grant"}), 400
+
+        # Используем оригинальный scope или новый (если он subset)
+        original_scopes = set(token_data['scope'].split())
+        requested_scopes = set(scope.split()) if scope else original_scopes
+
+        if not requested_scopes.issubset(original_scopes):
+            return jsonify({"error": "invalid_scope"}), 400
+
+        # Генерируем новый access token
+        access_token = self._generate_access_token(token_data['user_id'],
+                                                   client_id,
+                                                   ' '.join(requested_scopes))
+
+        response = {
+            "access_token": access_token,
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "scope": ' '.join(requested_scopes)
+        }
+
+        return jsonify(response)
+
+    def handle_userinfo_request(self):
+        """Обработка userinfo request"""
+        auth_header = request.headers.get('Authorization')
+
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({"error": "invalid_token"}), 401
+
+        access_token = auth_header.split(' ')[1]
+
+        if access_token not in self.access_tokens:
+            return jsonify({"error": "invalid_token"}), 401
+
+        token_data = self.access_tokens[access_token]
+
+        if token_data['expires_at'] < time.time():
+            return jsonify({"error": "invalid_token"}), 401
+
+        # Проверяем scope
+        scopes = token_data['scope'].split()
+        if 'profile' not in scopes and 'email' not in scopes:
+            return jsonify({"error": "insufficient_scope"}), 403
+
+        user_id = token_data['user_id']
+        user = self.users.get(user_id)
+
+        if not user:
+            return jsonify({"error": "invalid_token"}), 401
+
+        # Формируем ответ на основе scope
+        userinfo = {"sub": user_id}
+
+        if 'profile' in scopes:
+            userinfo["name"] = user.get('name')
+
+        if 'email' in scopes:
+            userinfo["email"] = user.get('email')
+            userinfo["email_verified"] = True
+
+        return jsonify(userinfo)
+
+    def handle_client_registration(self):
+        """Динамическая регистрация клиентов (RFC 7591)"""
+        data = request.get_json()
+
+        if not data:
+            return jsonify({"error": "invalid_request"}), 400
+
+        # Генерируем client_id и client_secret
+        client_id = secrets.token_urlsafe(16)
+        client_secret = secrets.token_urlsafe(32)
+
+        # Валидация redirect_uris
+        redirect_uris = data.get('redirect_uris', [])
+        if not redirect_uris:
+            return jsonify({"error": "invalid_redirect_uri"}), 400
+
+        # Создаем клиента
+        client = OAuth2Client(client_id=client_id,
+                              client_secret=client_secret,
+                              redirect_uris=redirect_uris,
+                              name=data.get('client_name', 'Unknown Client'),
+                              scopes=data.get('scope',
+                                              'openid profile email').split())
+
+        self.clients[client_id] = client
+
+        response = {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "client_id_issued_at": int(client.created_at.timestamp()),
+            "redirect_uris": redirect_uris,
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "token_endpoint_auth_method": "client_secret_basic"
+        }
+
+        return jsonify(response), 201
+
+    def show_login_page(self):
+        """Показать страницу логина"""
+        login_template = '''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>OAuth Login</title>
+            <style>
+                body { font-family: Arial, sans-serif; max-width: 400px; margin: 100px auto; }
+                .form-group { margin-bottom: 15px; }
+                label { display: block; margin-bottom: 5px; }
+                input[type="email"], input[type="password"] { width: 100%; padding: 8px; }
+                button { background: #007cba; color: white; padding: 10px 20px; border: none; cursor: pointer; }
+                .error { color: red; margin-top: 10px; }
+            </style>
+        </head>
+        <body>
+            <h2>OAuth Login</h2>
+            <form method="post">
+                <div class="form-group">
+                    <label>Email:</label>
+                    <input type="email" name="email" required>
+                </div>
+                <div class="form-group">
+                    <label>Password:</label>
+                    <input type="password" name="password" required>
+                </div>
+                <button type="submit">Login</button>
+                {% if error %}
+                    <div class="error">{{ error }}</div>
+                {% endif %}
+            </form>
+        </body>
+        </html>
+        '''
+
+        error = session.pop('login_error', None)
+        return render_template_string(login_template, error=error)
+
+    def handle_login(self):
+        """Обработка логина"""
+        email = request.form.get('email')
+        password = request.form.get('password')
+
+        # Простая проверка пользователя (в реальности через БД)
+        user = self.users.get(email)
+        if not user or user['password'] != password:
+            session['login_error'] = "Invalid email or password"
+            return redirect(url_for('login_page'))
+
+        # Сохраняем пользователя в сессии
+        session['user_id'] = email
+
+        # Если есть сохраненные OAuth параметры, перенаправляем обратно
+        oauth_params = session.pop('oauth_params', None)
+        if oauth_params:
+            return redirect(
+                url_for('authorize') + '?' + urlencode(oauth_params))
+
+        return jsonify({"message": "Login successful"})
+
+    def _show_consent_page(self, client: OAuth2Client, scope: str,
+                           redirect_uri: str, state: str, code_challenge: str,
+                           code_challenge_method: str):
+        """Показать страницу согласия"""
+        consent_template = '''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>OAuth Consent</title>
+            <style>
+                body { font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; }
+                .app-info { background: #f5f5f5; padding: 15px; margin-bottom: 20px; }
+                .permissions { margin: 20px 0; }
+                .permission { margin: 10px 0; padding: 5px; background: #e8f4f8; }
+                .buttons { margin-top: 20px; }
+                button { padding: 10px 20px; margin: 5px; border: none; cursor: pointer; }
+                .approve { background: #28a745; color: white; }
+                .deny { background: #dc3545; color: white; }
+            </style>
+        </head>
+        <body>
+            <h2>Authorization Request</h2>
+            <div class="app-info">
+                <strong>{{ client.name }}</strong> wants to access your account.
+            </div>
+
+            <div class="permissions">
+                <h3>Permissions requested:</h3>
+                {% for scope_item in scopes %}
+                    <div class="permission">{{ scope_descriptions[scope_item] }}</div>
+                {% endfor %}
+            </div>
+
+            <form method="post">
+                <input type="hidden" name="client_id" value="{{ client.client_id }}">
+                <input type="hidden" name="redirect_uri" value="{{ redirect_uri }}">
+                <input type="hidden" name="scope" value="{{ scope }}">
+                <input type="hidden" name="state" value="{{ state }}">
+                <input type="hidden" name="code_challenge" value="{{ code_challenge }}">
+                <input type="hidden" name="code_challenge_method" value="{{ code_challenge_method }}">
+
+                <div class="buttons">
+                    <button type="submit" name="consent" value="approve" class="approve">Allow</button>
+                    <button type="submit" name="consent" value="deny" class="deny">Deny</button>
+                </div>
+            </form>
+        </body>
+        </html>
+        '''
+
+        scope_descriptions = {
+            'openid': 'Access your identity',
+            'profile': 'Access your profile information',
+            'email': 'Access your email address'
+        }
+
+        scopes = scope.split()
+
+        return render_template_string(
+            consent_template,
+            client=client,
+            scopes=scopes,
+            scope_descriptions=scope_descriptions,
+            scope=scope,
+            redirect_uri=redirect_uri,
+            state=state or '',
+            code_challenge=code_challenge or '',
+            code_challenge_method=code_challenge_method or '')
+
+    def _authenticate_client(self, client_id: str, client_secret: str) -> bool:
+        """Аутентификация клиента"""
+        client = self.clients.get(client_id)
+        return client and client.client_secret == client_secret
+
+    def _verify_pkce(self, code_verifier: str, code_challenge: str,
+                     method: str) -> bool:
+        """Проверка PKCE"""
+        if method == 'plain':
+            return code_verifier == code_challenge
+        elif method == 'S256':
+            challenge = base64.urlsafe_b64encode(
+                hashlib.sha256(
+                    code_verifier.encode()).digest()).decode().rstrip('=')
+            return challenge == code_challenge
+        return False
+
+    def _generate_access_token(self, user_id: str, client_id: str,
+                               scope: str) -> str:
+        """Генерация access token"""
+        token = secrets.token_urlsafe(32)
+
+        self.access_tokens[token] = {
+            'user_id': user_id,
+            'client_id': client_id,
+            'scope': scope,
+            'expires_at': time.time() + 3600,  # 1 час
+            'token_type': 'Bearer'
+        }
+
+        return token
+
+    def _generate_refresh_token(self, user_id: str, client_id: str,
+                                scope: str) -> str:
+        """Генерация refresh token"""
+        token = secrets.token_urlsafe(32)
+
+        self.refresh_tokens[token] = {
+            'user_id': user_id,
+            'client_id': client_id,
+            'scope': scope,
+            'expires_at': time.time() + 86400 * 30,  # 30 дней
+        }
+
+        return token
+
+    def _generate_id_token(self, user_id: str, client_id: str,
+                           access_token: str) -> str:
+        """Генерация ID token (JWT) для OpenID Connect"""
+        issuer = request.url_root.rstrip('/')
+        now = datetime.utcnow()
+
+        payload = {
+            'iss': issuer,
+            'sub': user_id,
+            'aud': client_id,
+            'exp': int((now + timedelta(hours=1)).timestamp()),
+            'iat': int(now.timestamp()),
+            'at_hash': self._calculate_at_hash(access_token)
+        }
+
+        # Добавляем пользовательские claims
+        user = self.users.get(user_id)
+        if user:
+            payload['email'] = user.get('email')
+            payload['name'] = user.get('name')
+            payload['email_verified'] = True
+
+        # Подписываем JWT
+        private_key_pem = self.private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption())
+
+        return jwt.encode(payload,
+                          private_key_pem,
+                          algorithm='RS256',
+                          headers={'kid': self.key_id})
+
+    def _calculate_at_hash(self, access_token: str) -> str:
+        """Вычисление at_hash для ID token"""
+        digest = hashlib.sha256(access_token.encode()).digest()
+        return base64.urlsafe_b64encode(digest[:16]).decode().rstrip('=')
+
+    def _error_redirect(self,
+                        redirect_uri: str,
+                        error: str,
+                        state: str = None) -> str:
+        """Редирект с ошибкой"""
+        params = {'error': error}
+        if state:
+            params['state'] = state
+
+        redirect_url = f"{redirect_uri}?{urlencode(params)}"
+        return redirect(redirect_url)
+
+    def register_client(self,
+                        client_id: str,
+                        client_secret: str,
+                        redirect_uris: List[str],
+                        name: str,
+                        scopes: List[str] = None) -> OAuth2Client:
+        """Программная регистрация клиента"""
+        client = OAuth2Client(client_id, client_secret, redirect_uris, name,
+                              scopes)
+        self.clients[client_id] = client
+        return client

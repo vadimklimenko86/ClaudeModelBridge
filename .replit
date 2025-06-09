@@ -2,7 +2,7 @@ modules = ["python-3.11", "postgresql-16", "python3"]
 
 [nix]
 channel = "stable-24_05"
-packages = ["iana-etc", "libxcrypt", "openssl", "postgresql"]
+packages = ["cargo", "iana-etc", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc"]
 
 [deployment]
 deploymentTarget = "autoscale"
@@ -39,15 +39,6 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "uv add flask-socketio flask-cors requests"
-
-[[workflows.workflow]]
-name = "mcp_server"
-mode = "sequential"
-author = 39922616
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python3 http_server.py"
 
 [[ports]]
 localPort = 5000
