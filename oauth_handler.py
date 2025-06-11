@@ -1,3 +1,4 @@
+import logging
 import secrets
 import base64
 import hashlib
@@ -10,6 +11,7 @@ import jwt
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from flask import Flask, request, jsonify, redirect, render_template_string, session, url_for
+from starlette.applications import Starlette
 
 
 class OAuth2Client:
@@ -32,10 +34,25 @@ class OAuth2Client:
 class OAuth2Handler:
     """Полная реализация OAuth 2.0 Authorization Server"""
 
-    def __init__(self, app: Flask = None):
+    def __init__(self, app: Flask):
         self.app = app
         self.clients: Dict[str, OAuth2Client] = {
             "client_1749051312": {
+                "client_secret":
+                "claude_secret_key_2024",
+                "redirect_uris": [
+                    "https://claude.ai/oauth/callback",
+                    "http://localhost:8080/callback",
+                    "http://localhost:5000/oauth/callback",
+                    "urn:ietf:wg:oauth:2.0:oob"
+                ],
+                "grant_types":
+                ["authorization_code", "refresh_token", "client_credentials"],
+                "response_types": ["code"],
+                "scope":
+                "mcp:tools mcp:resources mcp:prompts system:read system:monitor read write admin claudeai"
+            },
+            "ij9PlHfJpoD8mQftZrNwxA": {
                 "client_secret":
                 "claude_secret_key_2024",
                 "redirect_uris": [
@@ -241,6 +258,9 @@ class OAuth2Handler:
             params['state'] = state
 
         redirect_url = f"{redirect_uri}?{urlencode(params)}"
+
+        logging.info(f'Redirecting to: {redirect_url}')
+
         return redirect(redirect_url)
 
         # Показываем страницу согласия

@@ -43,3 +43,4 @@ args = "uv add flask-socketio flask-cors requests"
 [[ports]]
 localPort = 5000
 externalPort = 80
+exposeLocalhost = true
