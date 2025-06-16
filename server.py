@@ -14,12 +14,16 @@ from pydantic import AnyUrl
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.routing import Mount, Route
-from starlette.types import Receive, Scope, Send
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from event_store import InMemoryEventStore
 
+#logger = logging.getLogger("uvicorn")
+#logger.setLevel(logging.INFO)
 # Configure logging
-logger = logging.getLogger(__name__)
+#logger = logging.getLogger(__name__)
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 
 @click.command()
@@ -159,14 +163,32 @@ def main(
 		    )
 		]
 
-		# Create an ASGI application using the transport
+	from starlette.middleware import Middleware
+	from starlette.middleware.cors import CORSMiddleware
 
-	starlette_app = Starlette(debug=True)
+	class GraphQLRedirect:
+
+		def __init__(self, app: ASGIApp) -> None:
+			self.app = app
+
+		async def __call__(self, scope: Scope, receive: Receive,
+		                   send: Send) -> None:
+			if not scope['path'].endswith("/"):
+				path = scope['path']
+				scope['path'] = path + "/"
+			await self.app(scope, receive, send)
+
+	# Create an ASGI application using the transport
+	middleware = [
+	    Middleware(CORSMiddleware, allow_origins=['*']),
+	    Middleware(GraphQLRedirect)
+	]
+	starlette_app = Starlette(debug=True, middleware=middleware)
+	starlette_app.router.redirect_slashes = False
 
 	from custom_server import customroutes
 	routes = customroutes(logger, app, starlette_app)
 
-	
 	import uvicorn
 	uvicorn.run(starlette_app, host="127.0.0.1", port=port)
 	return 0

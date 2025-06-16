@@ -5,7 +5,7 @@ import hashlib
 import json
 import time
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlencode, urlparse, parse_qs
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 import jwt
@@ -27,12 +27,14 @@ class OAuth2Client:
 	             client_secret: str,
 	             redirect_uris: List[str],
 	             name: str,
+	             grant_types: List[str] = None,
 	             scopes: List[str] = None):
 		self.client_id = client_id
 		self.client_secret = client_secret
 		self.redirect_uris = redirect_uris
 		self.name = name
 		self.scopes = scopes or ['openid', 'profile', 'email']
+		self.grant_types = grant_types or ['']
 		self.created_at = datetime.utcnow()
 
 
@@ -41,6 +43,7 @@ class OAuth2Manager:
 
 	def __init__(self, app: Starlette, logger: logging.Logger) -> None:
 		self.app = app
+
 		self.logger = logger
 		self.initialize()
 		# Генерируем RSA ключи для JWT
@@ -49,37 +52,18 @@ class OAuth2Manager:
 
 	def initialize(self):
 		self.clients: Dict[str, OAuth2Client] = {
-		    "client_1749051312": {
-		        "client_secret":
-		        "claude_secret_key_2024",
-		        "redirect_uris": [
-		            "https://claude.ai/oauth/callback",
-		            "http://localhost:8080/callback",
-		            "http://localhost:5000/oauth/callback",
-		            "urn:ietf:wg:oauth:2.0:oob"
+		    "client_1749051312":
+		    OAuth2Client(
+		        client_id="client_1749051312",
+		        client_secret="claude_secret_key_2024",
+		        redirect_uris=["https://claude.ai/oauth/callback"],
+		        name="",
+		        grant_types=[
+		            "authorization_code", "refresh_token", "client_credentials"
 		        ],
-		        "grant_types":
-		        ["authorization_code", "refresh_token", "client_credentials"],
-		        "response_types": ["code"],
-		        "scope":
-		        "mcp:tools mcp:resources mcp:prompts system:read system:monitor read write admin claudeai"
-		    },
-		    "ij9PlHfJpoD8mQftZrNwxA": {
-		        "client_secret":
-		        "claude_secret_key_2024",
-		        "redirect_uris": [
-		            "https://claude.ai/oauth/callback",
-		            "http://localhost:8080/callback",
-		            "http://localhost:5000/oauth/callback",
-		            "urn:ietf:wg:oauth:2.0:oob"
-		        ],
-		        "grant_types":
-		        ["authorization_code", "refresh_token", "client_credentials"],
-		        "response_types": ["code"],
-		        "scope":
-		        "mcp:tools mcp:resources mcp:prompts system:read system:monitor read write admin claudeai"
-		    }
+		    )
 		}
+
 		self.authorization_codes: Dict[str, dict] = {}
 		self.access_tokens: Dict[str, dict] = {}
 		self.refresh_tokens: Dict[str, dict] = {}
@@ -123,9 +107,9 @@ class OAuth2Manager:
 		#	await response(scope, receive, send)
 
 		# Discovery endpoint
-		#@route('/.well-known/oauth-authorization-server')
+		@route('/.well-known/oauth-authorization-server')
 		async def oauth_metadata(scope: Scope, receive: Receive, send: Send):
-			self.logger.info("/.well-known/oauth-authorization-server")
+
 			request = Request(scope, receive)
 			response = self.get_authorization_server_metadata(request)
 			await response(scope, receive, send)
@@ -138,24 +122,23 @@ class OAuth2Manager:
 			await response(scope, receive, send)
 
 		# Authorization endpoint
-		@route('/authorize')
+		@route('/oauth/authorize')
 		async def authorize(scope: Scope, receive: Receive, send: Send):
 			request = Request(scope, receive)
 			response = self.handle_authorization_request(request)
 			await response(scope, receive, send)
 
 		# Token endpoint
-		@route('/token', methods=['POST'])
+		@route('/oauth/token', methods=['POST'])
 		async def token(scope: Scope, receive: Receive, send: Send):
 			request = Request(scope, receive)
-			response = self.handle_token_request(request)
+			response = await self.handle_token_request(request)
 			await response(scope, receive, send)
 
 	def get_authorization_server_metadata(self, request: Request) -> Response:
 		"""RFC 8414 - OAuth 2.0 Authorization Server Metadata"""
 
-		issuer = request.url._url.rstrip('/')
-		self.logger.info(f"issuer: {issuer}")
+		issuer = request.base_url._url.rstrip('/')
 		metadata = {
 		    "issuer":
 		    issuer,
@@ -189,10 +172,10 @@ class OAuth2Manager:
 		return response
 		#return jsonify(metadata)
 
-	def jsonify(self, data) -> Response:
+	def jsonify(self, data, status_code: int = HTTPStatus.OK) -> Response:
 		response = Response(
 		    json.dumps(data),
-		    status_code=HTTPStatus.OK,
+		    status_code=status_code,
 		)
 		return response
 
@@ -252,14 +235,14 @@ class OAuth2Manager:
 		#if 'user_id' not in self.session:
 		#	# Сохраняем параметры для возврата после логина
 		#	session['oauth_params'] = request.query_params.to_dict()
-		#	return redirect(url_for('login_page'))
+		#	return RedirectResponse('login_page')
 
 		# Генерируем authorization code
 		auth_code = secrets.token_urlsafe(32)
 
 		self.authorization_codes[auth_code] = {
 		    'client_id': client_id,
-		    #'user_id': session['user_id'],
+		    'user_id': client_id,  #session['user_id'],
 		    'redirect_uri': redirect_uri,
 		    'scope': scope,
 		    'code_challenge': code_challenge,
@@ -283,14 +266,113 @@ class OAuth2Manager:
 		return self._show_consent_page(client, scope, redirect_uri, state,
 		                               code_challenge, code_challenge_method)
 
-	def handle_token_request(self, request: Request) -> Response:
+	def _authenticate_client(self, client_id: str, client_secret: str) -> bool:
+		"""Аутентификация клиента"""
+		client = self.clients.get(client_id)
+		return client  # and client.client_secret == client_secret
+
+	def _verify_pkce(self, code_verifier: str, code_challenge: str,
+	                 method: str) -> bool:
+		"""Проверка PKCE"""
+		if method == 'plain':
+			return code_verifier == code_challenge
+		elif method == 'S256':
+			challenge = base64.urlsafe_b64encode(
+			    hashlib.sha256(code_verifier.encode()).digest()).decode().rstrip('=')
+			return challenge == code_challenge
+		return False
+
+	def _generate_access_token(self, user_id: str, client_id: str,
+	                           scope: str) -> str:
+		"""Генерация access token"""
+		token = secrets.token_urlsafe(32)
+
+		self.access_tokens[token] = {
+		    'user_id': user_id,
+		    'client_id': client_id,
+		    'scope': scope,
+		    'expires_at': time.time() + 3600,  # 1 час
+		    'token_type': 'Bearer'
+		}
+
+		return token
+
+	async def _handle_authorization_code_grant(self, request: Request):
+		"""Обработка authorization_code grant"""
+		form_data = await request.form()
+		code = form_data.get('code')
+		client_id = form_data.get('client_id')
+		client_secret = form_data.get('client_secret')
+		redirect_uri = form_data.get('redirect_uri')
+		code_verifier = form_data.get('code_verifier')
+
+		# Валидация клиента
+		if not self._authenticate_client(client_id, client_secret):
+			return self.jsonify({"error": "invalid_client"}, 401)
+
+		# Валидация authorization code
+		if code not in self.authorization_codes:
+			return self.jsonify({"error": "invalid_grant"}, 400)
+
+		code_data = self.authorization_codes[code]
+
+		# Проверки
+		if code_data['used'] or code_data['expires_at'] < time.time():
+			return self.jsonify({"error": "invalid_grant"}, 400)
+
+		if code_data['client_id'] != client_id:
+			return self.jsonify({"error": "invalid_grant"}, 400)
+
+		if code_data['redirect_uri'] != redirect_uri:
+			return self.jsonify({"error": "invalid_grant"}, 400)
+
+		# PKCE проверка
+		if code_data.get('code_challenge'):
+			if not code_verifier:
+				return self.jsonify({"error": "invalid_request"}, 400)
+
+			if not self._verify_pkce(code_verifier, code_data['code_challenge'],
+			                         code_data.get('code_challenge_method', 'S256')):
+				return self.jsonify({"error": "invalid_grant"}, 400)
+
+		# Помечаем код как использованный
+		code_data['used'] = True
+
+		# Генерируем токены
+		access_token = self._generate_access_token(code_data['user_id'], client_id,
+		                                           code_data['scope'])
+
+		refresh_token = self._generate_refresh_token(code_data['user_id'],
+		                                             client_id, code_data['scope'])
+
+		# ID Token для OpenID Connect
+		id_token = None
+		if 'openid' in code_data['scope']:
+			id_token = self._generate_id_token(code_data['user_id'], client_id,
+			                                   access_token)
+
+		response = {
+		    "access_token": access_token,
+		    "token_type": "Bearer",
+		    "expires_in": 3600,
+		    "refresh_token": refresh_token,
+		    "scope": code_data['scope']
+		}
+
+		if id_token:
+			response["id_token"] = id_token
+
+		return self.jsonify(response)
+
+	async def handle_token_request(self, request: Request) -> Response:
 		"""Обработка token request"""
-		grant_type = request.form.get('grant_type')
-		throw Exception(f"{grant_type")
-		return Response(json.dumps({"error": "unsupported_grant_type"}), 400)
-		#if grant_type == 'authorization_code':
-		#		return self._handle_authorization_code_grant()
-		#elif grant_type == 'refresh_token':
-		#		return self._handle_refresh_token_grant()
-		#else:
-		#		return jsonify({"error": "unsupported_grant_type"}), 400
+		form_data = await request.form()
+		grant_type = form_data.get('grant_type')
+		#raise Exception(f"{grant_type}")
+		#return Response(json.dumps({"error": "unsupported_grant_type"}), 400)
+		if grant_type == 'authorization_code':
+			return await self._handle_authorization_code_grant(request)
+		elif grant_type == 'refresh_token':
+			return await self._handle_refresh_token_grant()
+		else:
+			return self.jsonify({"error": "unsupported_grant_type"}, 400)

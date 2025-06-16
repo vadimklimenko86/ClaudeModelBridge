@@ -243,7 +243,7 @@ class OAuth2Handler:
 
         self.authorization_codes[auth_code] = {
             'client_id': client_id,
-            'user_id': session['user_id'],
+            'user_id': client_id,#session['user_id'],
             'redirect_uri': redirect_uri,
             'scope': scope,
             'code_challenge': code_challenge,
@@ -288,7 +288,7 @@ class OAuth2Handler:
 
         self.authorization_codes[auth_code] = {
             'client_id': client_id,
-            'user_id': session['user_id'],
+            'user_id': client_id,#session['user_id'],
             'redirect_uri': redirect_uri,
             'scope': scope,
             'code_challenge': code_challenge,
