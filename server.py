@@ -1,12 +1,12 @@
+import asyncio
 import contextlib
 import logging
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Coroutine
 from typing import Self
 
 import anyio
 import click
-from flask import Flask
 import mcp.types as types
 from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
@@ -18,11 +18,12 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from event_store import InMemoryEventStore
 
+import datetime
 #logger = logging.getLogger("uvicorn")
 #logger.setLevel(logging.INFO)
 # Configure logging
-#logger = logging.getLogger(__name__)
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
+#logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
@@ -50,15 +51,16 @@ def main(
 	    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 	)
 
-	app = Server("mcp-streamable-http-demo")
+	mcp = Server("mcp-streamable-http-demo")
+	tz_plus3 = datetime.timezone(datetime.timedelta(hours=3))
 
-	@app.call_tool()
+	@mcp.call_tool()
 	async def call_tool(
 	    name: str, arguments: dict
 	) -> list[types.TextContent
 	          | types.ImageContent
 	          | types.EmbeddedResource]:
-		ctx = app.request_context
+		ctx = mcp.request_context
 
 		if name == "echo":
 			message = arguments.get("message", "")
@@ -81,7 +83,14 @@ def main(
 			        type="text",
 			        text=f"Echo Response:\n{json.dumps(response, indent=2)}")
 			]
-		else:
+		elif name == "gettime":
+			return [
+			    types.TextContent(
+			        type="text",
+			        text=
+			        f"Current time: {datetime.datetime.now(tz_plus3).isoformat()}")
+			]
+		elif False:
 			interval = arguments.get("interval", 1.0)
 			count = arguments.get("count", 5)
 			caller = arguments.get("caller", "unknown")
@@ -118,11 +127,17 @@ def main(
 			    )
 			]
 
-	@app.list_tools()
+	@mcp.list_tools()
 	async def list_tools() -> list[types.Tool]:
 		return [
+		    types.Tool(name="gettime",
+		               description="Получить текущее время",
+		               inputSchema={
+		                   "type": "object",
+		                   "properties": {}
+		               }),
 		    types.Tool(name="echo",
-		               description="Echo back any message with timestamp",
+		               description="Использовать для проверки работы интеграции",
 		               inputSchema={
 		                   "type": "object",
 		                   "properties": {
@@ -163,32 +178,9 @@ def main(
 		    )
 		]
 
-	from starlette.middleware import Middleware
-	from starlette.middleware.cors import CORSMiddleware
-
-	class GraphQLRedirect:
-
-		def __init__(self, app: ASGIApp) -> None:
-			self.app = app
-
-		async def __call__(self, scope: Scope, receive: Receive,
-		                   send: Send) -> None:
-			if not scope['path'].endswith("/"):
-				path = scope['path']
-				scope['path'] = path + "/"
-			await self.app(scope, receive, send)
-
-	# Create an ASGI application using the transport
-	middleware = [
-	    Middleware(CORSMiddleware, allow_origins=['*']),
-	    Middleware(GraphQLRedirect)
-	]
-	starlette_app = Starlette(debug=True, middleware=middleware)
-	starlette_app.router.redirect_slashes = False
-
-	from custom_server import customroutes
-	routes = customroutes(logger, app, starlette_app)
+	from custom_server import CustomServerWithOauth2
+	routes = CustomServerWithOauth2(logger, mcp)
 
 	import uvicorn
-	uvicorn.run(starlette_app, host="127.0.0.1", port=port)
+	uvicorn.run(routes, host="127.0.0.1", port=port)
 	return 0

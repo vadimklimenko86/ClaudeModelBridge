@@ -348,8 +348,8 @@ class OAuth2Manager:
 		# ID Token для OpenID Connect
 		id_token = None
 		if 'openid' in code_data['scope']:
-			id_token = self._generate_id_token(code_data['user_id'], client_id,
-			                                   access_token)
+			id_token = self._generate_id_token(request, code_data['user_id'],
+			                                   client_id, access_token)
 
 		response = {
 		    "access_token": access_token,
@@ -373,6 +373,103 @@ class OAuth2Manager:
 		if grant_type == 'authorization_code':
 			return await self._handle_authorization_code_grant(request)
 		elif grant_type == 'refresh_token':
-			return await self._handle_refresh_token_grant()
+			return await self._handle_refresh_token_grant(request)
 		else:
 			return self.jsonify({"error": "unsupported_grant_type"}, 400)
+
+	def _generate_refresh_token(self, user_id: str, client_id: str,
+	                            scope: str) -> str:
+		"""Генерация refresh token"""
+		token = secrets.token_urlsafe(32)
+
+		self.refresh_tokens[token] = {
+		    'user_id': user_id,
+		    'client_id': client_id,
+		    'scope': scope,
+		    'expires_at': time.time() + 86400 * 30,  # 30 дней
+		}
+
+		return token
+
+	def _generate_id_token(self, request: Request, user_id: str, client_id: str,
+	                       access_token: str) -> str:
+		"""Генерация ID token (JWT) для OpenID Connect"""
+		issuer = request.base_url._url.rstrip('/')
+		now = datetime.utcnow()
+
+		payload = {
+		    'iss': issuer,
+		    'sub': user_id,
+		    'aud': client_id,
+		    'exp': int((now + timedelta(hours=1)).timestamp()),
+		    'iat': int(now.timestamp()),
+		    'at_hash': self._calculate_at_hash(access_token)
+		}
+
+		# Добавляем пользовательские claims
+		user = self.users.get(user_id)
+		if user:
+			payload['email'] = user.get('email')
+			payload['name'] = user.get('name')
+			payload['email_verified'] = True
+
+		# Подписываем JWT
+		private_key_pem = self.private_key.private_bytes(
+		    encoding=serialization.Encoding.PEM,
+		    format=serialization.PrivateFormat.PKCS8,
+		    encryption_algorithm=serialization.NoEncryption())
+
+		return jwt.encode(payload,
+		                  private_key_pem,
+		                  algorithm='RS256',
+		                  headers={'kid': self.key_id})
+
+	def _calculate_at_hash(self, access_token: str) -> str:
+		"""Вычисление at_hash для ID token"""
+		digest = hashlib.sha256(access_token.encode()).digest()
+		return base64.urlsafe_b64encode(digest[:16]).decode().rstrip('=')
+
+	async def _handle_refresh_token_grant(self, request: Request):
+		"""Обработка refresh_token grant"""
+		form_data = await request.form()
+		refresh_token = form_data.get('refresh_token')
+		client_id = form_data.get('client_id')
+		client_secret = form_data.get('client_secret')
+		scope = form_data.get('scope')
+
+		# Валидация клиента
+		if not self._authenticate_client(client_id, client_secret):
+			return self.jsonify({"error": "invalid_client"}, 401)
+
+		# Валидация refresh token
+		if refresh_token not in self.refresh_tokens:
+			return self.jsonify({"error": "invalid_grant"}, 400)
+
+		token_data = self.refresh_tokens[refresh_token]
+
+		if token_data['expires_at'] < time.time():
+			return self.jsonify({"error": "invalid_grant"}, 400)
+
+		if token_data['client_id'] != client_id:
+			return self.jsonify({"error": "invalid_grant"}, 400)
+
+		# Используем оригинальный scope или новый (если он subset)
+		original_scopes = set(token_data['scope'].split())
+		requested_scopes = set(scope.split()) if scope else original_scopes
+
+		if not requested_scopes.issubset(original_scopes):
+			return self.jsonify({"error": "invalid_scope"}, 400)
+
+		# Генерируем новый access token
+		access_token = self._generate_access_token(token_data['user_id'],
+		                                           client_id,
+		                                           ' '.join(requested_scopes))
+
+		response = {
+		    "access_token": access_token,
+		    "token_type": "Bearer",
+		    "expires_in": 3600,
+		    "scope": ' '.join(requested_scopes)
+		}
+
+		return self.jsonify(response)
