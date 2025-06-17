@@ -19,6 +19,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from event_store import InMemoryEventStore
 
 import datetime
+import MCP_Tools
 #logger = logging.getLogger("uvicorn")
 #logger.setLevel(logging.INFO)
 # Configure logging
@@ -54,6 +55,19 @@ def main(
 	mcp = Server("mcp-streamable-http-demo")
 	tz_plus3 = datetime.timezone(datetime.timedelta(hours=3))
 
+	tools = MCP_Tools.MCP_Tools(mcp)
+
+	@tools.RegisterTool(name="testFunc", description="Test func")
+	def func1() -> list[types.TextContent
+	                    | types.ImageContent
+	                    | types.EmbeddedResource]:
+		return [
+		    types.TextContent(
+		        type="text",
+		        text=f"Current time: {datetime.datetime.now(tz_plus3).isoformat()}"
+		    )
+		]
+
 	@mcp.call_tool()
 	async def call_tool(
 	    name: str, arguments: dict
@@ -61,6 +75,8 @@ def main(
 	          | types.ImageContent
 	          | types.EmbeddedResource]:
 		ctx = mcp.request_context
+
+		return tools.ToolsFuncs[name]()
 
 		if name == "echo":
 			message = arguments.get("message", "")
@@ -90,7 +106,7 @@ def main(
 			        text=
 			        f"Current time: {datetime.datetime.now(tz_plus3).isoformat()}")
 			]
-		elif False:
+		elif name == "start-notification-stream":
 			interval = arguments.get("interval", 1.0)
 			count = arguments.get("count", 5)
 			caller = arguments.get("caller", "unknown")
@@ -129,6 +145,7 @@ def main(
 
 	@mcp.list_tools()
 	async def list_tools() -> list[types.Tool]:
+		return list(tools.ToolsDict.values())
 		return [
 		    types.Tool(name="gettime",
 		               description="Получить текущее время",
@@ -175,7 +192,7 @@ def main(
 		                },
 		            },
 		        },
-		    )
+		    ),
 		]
 
 	from custom_server import CustomServerWithOauth2
