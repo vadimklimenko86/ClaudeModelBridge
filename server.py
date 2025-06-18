@@ -60,8 +60,9 @@ def main(
 
 	from Tools.System import SystemTools
 	from Tools.FileSystem_improved import FileSystemTools
+	from Tools.Memory_fixed import MemoryTools
 
-	[SystemTools(tools), FileSystemTools(tools)]
+	[SystemTools(tools), FileSystemTools(tools), MemoryTools(tools)]
 
 	@mcp.call_tool()
 	async def call_tool(
