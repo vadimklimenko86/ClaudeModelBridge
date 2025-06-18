@@ -9,7 +9,7 @@ deploymentTarget = "autoscale"
 run = ["sh", "-c", "python main.py"]
 
 [workflows]
-runButton = "Run"
+runButton = "Development Server"
 
 [[workflows.workflow]]
 name = "Project"
@@ -45,6 +45,15 @@ args = "uv add flask-socketio flask-cors requests"
 name = "Run"
 mode = "sequential"
 author = 39922616
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py"
+
+[[workflows.workflow]]
+name = "Development Server"
+author = 39922616
+mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
