@@ -59,6 +59,15 @@ mode = "sequential"
 task = "shell.exec"
 args = "python main.py"
 
+[[workflows.workflow]]
+name = "Production Server"
+author = 39922616
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python server.py --port 5000"
+
 [[ports]]
 localPort = 5000
 externalPort = 80
