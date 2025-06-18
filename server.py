@@ -20,6 +20,7 @@ from event_store import InMemoryEventStore
 
 import datetime
 import MCP_Tools
+from mcp.shared.context import RequestContext
 #logger = logging.getLogger("uvicorn")
 #logger.setLevel(logging.INFO)
 # Configure logging
@@ -57,16 +58,10 @@ def main(
 
 	tools = MCP_Tools.MCP_Tools(mcp)
 
-	@tools.RegisterTool(name="testFunc", description="Test func")
-	def func1() -> list[types.TextContent
-	                    | types.ImageContent
-	                    | types.EmbeddedResource]:
-		return [
-		    types.TextContent(
-		        type="text",
-		        text=f"Current time: {datetime.datetime.now(tz_plus3).isoformat()}"
-		    )
-		]
+	from Tools.System import SystemTools
+	from Tools.FileSystem_improved import FileSystemTools
+
+	[SystemTools(tools), FileSystemTools(tools)]
 
 	@mcp.call_tool()
 	async def call_tool(
@@ -75,125 +70,11 @@ def main(
 	          | types.ImageContent
 	          | types.EmbeddedResource]:
 		ctx = mcp.request_context
-
-		return tools.ToolsFuncs[name]()
-
-		if name == "echo":
-			message = arguments.get("message", "")
-			metadata = arguments.get("metadata", {})
-			#timestamp = time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())
-
-			response = {
-			    "original_message": message,
-			    #"timestamp": timestamp,
-			    "metadata": metadata,
-			    "server_info": {
-			        "name": "Custom server",
-			        "protocol_version": "2024-11-05",
-			        "sdk_version": "1.9.2"
-			    }
-			}
-
-			return [
-			    types.TextContent(
-			        type="text",
-			        text=f"Echo Response:\n{json.dumps(response, indent=2)}")
-			]
-		elif name == "gettime":
-			return [
-			    types.TextContent(
-			        type="text",
-			        text=
-			        f"Current time: {datetime.datetime.now(tz_plus3).isoformat()}")
-			]
-		elif name == "start-notification-stream":
-			interval = arguments.get("interval", 1.0)
-			count = arguments.get("count", 5)
-			caller = arguments.get("caller", "unknown")
-
-			# Send the specified number of notifications with the given interval
-			for i in range(count):
-				# Include more detailed message for resumability demonstration
-				notification_msg = (f"[{i+1}/{count}] Event from '{caller}' - "
-				                    f"Use Last-Event-ID to resume if disconnected")
-				await ctx.session.send_log_message(
-				    level="info",
-				    data=notification_msg,
-				    logger="notification_stream",
-				    # Associates this notification with the original request
-				    # Ensures notifications are sent to the correct response stream
-				    # Without this, notifications will either go to:
-				    # - a standalone SSE stream (if GET request is supported)
-				    # - nowhere (if GET request isn't supported)
-				    related_request_id=ctx.request_id,
-				)
-				logger.debug(f"Sent notification {i+1}/{count} for caller: {caller}")
-				if i < count - 1:  # Don't wait after the last notification
-					await anyio.sleep(interval)
-
-			# This will send a resource notificaiton though standalone SSE
-			# established by GET request
-			await ctx.session.send_resource_updated(
-			    uri=AnyUrl("http:///test_resource"))
-			return [
-			    types.TextContent(
-			        type="text",
-			        text=(f"Sent {count} notifications with {interval}s interval"
-			              f" for caller: {caller}"),
-			    )
-			]
+		return tools.ToolsFuncs[name](arguments)
 
 	@mcp.list_tools()
 	async def list_tools() -> list[types.Tool]:
 		return list(tools.ToolsDict.values())
-		return [
-		    types.Tool(name="gettime",
-		               description="Получить текущее время",
-		               inputSchema={
-		                   "type": "object",
-		                   "properties": {}
-		               }),
-		    types.Tool(name="echo",
-		               description="Использовать для проверки работы интеграции",
-		               inputSchema={
-		                   "type": "object",
-		                   "properties": {
-		                       "message": {
-		                           "type": "string",
-		                           "description": "Message to echo back"
-		                       }
-		                   },
-		                   "required": ["message"]
-		               }),
-		    types.Tool(
-		        name="start-notification-stream",
-		        description=(
-		            "Sends a stream of notifications with configurable count"
-		            " and interval"),
-		        inputSchema={
-		            "type": "object",
-		            "required": ["interval", "count", "caller"],
-		            "properties": {
-		                "interval": {
-		                    "type": "number",
-		                    "description":
-		                    "Interval between notifications in seconds",
-		                },
-		                "count": {
-		                    "type": "number",
-		                    "description": "Number of notifications to send",
-		                },
-		                "caller": {
-		                    "type":
-		                    "string",
-		                    "description":
-		                    ("Identifier of the caller to include in notifications"
-		                     ),
-		                },
-		            },
-		        },
-		    ),
-		]
 
 	from custom_server import CustomServerWithOauth2
 	routes = CustomServerWithOauth2(logger, mcp)
