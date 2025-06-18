@@ -6,9 +6,10 @@ packages = ["cargo", "iana-etc", "libiconv", "libxcrypt", "openssl", "pkg-config
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["gunicorn", "--bind", "0.0.0.0:5000", "main:app"]
+run = ["sh", "-c", "python main.py"]
 
 [workflows]
+runButton = "Run"
 
 [[workflows.workflow]]
 name = "Project"
@@ -39,6 +40,15 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "uv add flask-socketio flask-cors requests"
+
+[[workflows.workflow]]
+name = "Run"
+mode = "sequential"
+author = 39922616
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py"
 
 [[ports]]
 localPort = 5000
