@@ -3,8 +3,6 @@ import contextlib
 import json
 from typing import Self
 from collections.abc import AsyncIterator, Sequence
-
-from flask import Flask
 from starlette.applications import Starlette
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from pydantic import AnyUrl
