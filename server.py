@@ -81,5 +81,6 @@ def main(
 	routes = CustomServerWithOauth2(logger, mcp)
 
 	import uvicorn
-	uvicorn.run(routes, host="0.0.0.0", port=port)
+	logger.info(f"Starting server on host=0.0.0.0, port={port}")
+	uvicorn.run(routes, host="0.0.0.0", port=port, log_level=log_level.lower())
 	return 0
