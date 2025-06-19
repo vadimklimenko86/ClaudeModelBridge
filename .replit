@@ -6,10 +6,10 @@ packages = ["cargo", "iana-etc", "libiconv", "libxcrypt", "openssl", "pkg-config
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["sh", "-c", "python main.py"]
+run = ["sh", "-c", "python main.py --port 80"]
 
 [workflows]
-runButton = "Development Server"
+runButton = "Production Server"
 
 [[workflows.workflow]]
 name = "Project"
@@ -71,4 +71,3 @@ args = "python main.py --port 5000"
 [[ports]]
 localPort = 5000
 externalPort = 80
-exposeLocalhost = true
