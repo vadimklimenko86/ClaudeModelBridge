@@ -138,7 +138,16 @@ class OAuth2Manager:
 	def get_authorization_server_metadata(self, request: Request) -> Response:
 		"""RFC 8414 - OAuth 2.0 Authorization Server Metadata"""
 
-		issuer = request.base_url._url.rstrip('/')
+		# Use proper external URL instead of localhost
+		base_url = request.base_url._url.rstrip('/')
+		if '127.0.0.1' in base_url or 'localhost' in base_url:
+			# Replace with proper Replit domain or use request headers
+			host = request.headers.get('host', request.headers.get('x-forwarded-host', ''))
+			if host:
+				scheme = 'https' if request.headers.get('x-forwarded-proto') == 'https' else 'http'
+				base_url = f"{scheme}://{host}"
+		
+		issuer = base_url
 		metadata = {
 		    "issuer":
 		    issuer,
@@ -394,7 +403,16 @@ class OAuth2Manager:
 	def _generate_id_token(self, request: Request, user_id: str, client_id: str,
 	                       access_token: str) -> str:
 		"""Генерация ID token (JWT) для OpenID Connect"""
-		issuer = request.base_url._url.rstrip('/')
+		# Use proper external URL instead of localhost
+		base_url = request.base_url._url.rstrip('/')
+		if '127.0.0.1' in base_url or 'localhost' in base_url:
+			# Replace with proper Replit domain or use request headers
+			host = request.headers.get('host', request.headers.get('x-forwarded-host', ''))
+			if host:
+				scheme = 'https' if request.headers.get('x-forwarded-proto') == 'https' else 'http'
+				base_url = f"{scheme}://{host}"
+		
+		issuer = base_url
 		now = datetime.utcnow()
 
 		payload = {
