@@ -36,7 +36,8 @@ class SlashesFixer:
 		self.app = app
 
 	async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-		if not scope['path'].endswith("/"):
+		print(f"[SlashesFixer]: {scope['path']}")
+		if scope['path'].startswith("/mcp") and not scope['path'].endswith("/"):
 			path = scope['path']
 			scope['path'] = path + "/"
 		await self.app(scope, receive, send)
@@ -48,6 +49,7 @@ class CustomServerWithOauth2:
 
 		logger.info("StarletteApp")
 		self.inited = False
+		
 		# Create event store for resumability
 		# The InMemoryEventStore enables resumability support for StreamableHTTP transport.
 		# It stores SSE events with unique IDs, allowing clients to:
@@ -67,31 +69,73 @@ class CustomServerWithOauth2:
 
 		self.session_manager = session_manager
 
-		self.app = Starlette(
-		    debug=False,
-		    middleware=[
-		        Middleware(CORSMiddleware, allow_origins=['*']),
-		        Middleware(SlashesFixer)
-		    ],
-		    routes=[Mount("/mcp", app=self.handle_streamable_http)])
-		self.app.router.redirect_slashes = False
 		from oauth2_manager import OAuth2Manager
 
-		self.oauth = OAuth2Manager(self.app, logger)
+		self.oauth = OAuth2Manager(logger)
+		#routes=	self.oauth.routes.extends(		[
+		#	Mount("/mcp", app=self.handle_streamable_http),
+		#	#Mount("/", app=self.handle_streamable_http)
+		#])
+		routes = []
+		#Mount('/', routes = self.oauth.routes),
 
+		routes.extend([Mount("/mcp", app=self.handle_streamable_http)])
+		#routes.extend([Mount("/", routes=self.oauth.routes)])
+
+		print(routes)
+
+
+		
+		self.app = Starlette(debug=False,
+		                     middleware=[
+		                         #Middleware(CORSMiddleware, allow_origins=['*']),
+		                         Middleware(SlashesFixer)
+		                     ],
+		                     routes=routes)
+		self.app.router.redirect_slashes = False
+
+		self.app.add_middleware(
+				CORSMiddleware,
+				allow_origins=["https://claude.ai"],
+				allow_credentials=True,
+				allow_methods=["GET", "POST", "OPTIONS"],
+				allow_headers=["*"],
+		)
+		
+		for route in self.oauth.routes:
+			self.app.router.routes.append(route)
+		print(self.app.router.routes)
 		# ASGI handler for streamable HTTP connections
 
 	async def handle_streamable_http(self, scope: Scope, receive: Receive,
 	                                 send: Send) -> None:
 		request = Request(scope, receive)
-		auth_header = request.headers.get('Authorization')
+		auth_header = request.headers.get('Authorization') or 'Bearer 123'
+		
 		if not auth_header or not auth_header.startswith('Bearer '):
+			print(f"handle_streamable_http: {scope['path']}, {request.headers}")
+
+			retobj={
+				"jsonrpc": "2.0", 
+				"error": {
+						"code": -32001,
+						"message": "Invalid token"
+				}
+			}
+			#response = AuthorizationErrorResponse()
 			response = Response(
-			    "Bad Request: No valid session ID provided",
+			    json.dumps(retobj),
 			    status_code=HTTPStatus.UNAUTHORIZED,
+					headers={"WWW-Authenticate": f"Bearer resource_metadata=\"{request.base_url._url.rstrip('/')}/.well-known/oauth-protected-resource\""}		
 			)
+			#print(response.headers)
+			#content = await request.json()
+			#print(content)
+			#print(request.form())
 			await response(scope, receive, send)
+			#await self.session_manager.handle_request(scope, receive, send)
 		else:
+			#print(f"handle_streamable_http: {scope['path']}")
 			await self.session_manager.handle_request(scope, receive, send)
 
 	async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:

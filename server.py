@@ -77,7 +77,7 @@ def main(
 	async def list_tools() -> list[types.Tool]:
 		return list(tools.ToolsDict.values())
 
-	from custom_server import CustomServerWithOauth2
+	from Data.custom_server import CustomServerWithOauth2
 	routes = CustomServerWithOauth2(logger, mcp)
 
 	import uvicorn
