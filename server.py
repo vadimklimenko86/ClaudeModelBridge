@@ -16,12 +16,11 @@ from starlette.requests import Request
 from starlette.routing import Mount, Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from event_store import InMemoryEventStore
-
+from Data.event_store import InMemoryEventStore
+from Data.MCP_Tools import MCP_Tools
 import datetime
-import MCP_Tools
 from mcp.shared.context import RequestContext
-#logger = logging.getLogger("uvicorn")
+#logger = logging.getLogger("u(vicorn")
 #logger.setLevel(logging.INFO)
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -56,7 +55,7 @@ def main(
 	mcp = Server("mcp-streamable-http-demo")
 	tz_plus3 = datetime.timezone(datetime.timedelta(hours=3))
 
-	tools = MCP_Tools.MCP_Tools(mcp)
+	tools = MCP_Tools(mcp)
 
 	from Tools.System import SystemTools
 	from Tools.FileSystem_improved import FileSystemTools
@@ -71,11 +70,12 @@ def main(
 	          | types.ImageContent
 	          | types.EmbeddedResource]:
 		ctx = mcp.request_context
-		return tools.ToolsFuncs[name](arguments)
+		return tools.execute_tool(name,arguments)
 
 	@mcp.list_tools()
 	async def list_tools() -> list[types.Tool]:
-		return list(tools.ToolsDict.values())
+		return tools.get_tools_list()
+								
 
 	from Data.custom_server import CustomServerWithOauth2
 	routes = CustomServerWithOauth2(logger, mcp)

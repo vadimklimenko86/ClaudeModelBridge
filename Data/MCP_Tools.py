@@ -211,7 +211,7 @@ class MCP_Tools:
 			
 			self.tools_handlers[name] = wrapper
 			
-			logger.info(f"Registered tool '{name}' with schema: {input_schema}")
+			#logger.info(f"Registered tool '{name}' with schema: {input_schema}")
 			
 			return wrapper
 		
@@ -261,7 +261,7 @@ class MCP_Tools:
 			
 			self.tools_handlers[name] = wrapper
 			
-			logger.info(f"Registered simple tool '{name}'")
+			#logger.info(f"Registered simple tool '{name}'")
 			
 			return wrapper
 		

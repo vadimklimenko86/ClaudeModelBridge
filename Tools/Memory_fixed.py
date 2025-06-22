@@ -1,4 +1,4 @@
-from MCP_Tools import MCP_Tools
+from Data.MCP_Tools import MCP_Tools
 import mcp.types as types
 import datetime
 import os
@@ -456,7 +456,7 @@ class MemoryTools:
     def _register_tools(self, mcp: MCP_Tools):
         """Регистрация всех инструментов памяти"""
         
-        @mcp.RegisterTool2(name="add_memory", description="Добавить новое воспоминание в память")
+        @mcp.register_tool(name="add_memory", description="Добавить новое воспоминание в память")
         def add_memory(
             content: Annotated[str, "Содержимое воспоминания"],
             importance: Annotated[float, "Важность воспоминания (0.0-10.0)"] = 1.0,
@@ -492,7 +492,7 @@ class MemoryTools:
                 self.logger.error(error_msg)
                 return [types.TextContent(type="text", text=error_msg)]
         
-        @mcp.RegisterTool2(name="search_memory", description="Поиск воспоминаний по запросу")
+        @mcp.register_tool(name="search_memory", description="Поиск воспоминаний по запросу")
         def search_memory(
             query: Annotated[str, "Поисковый запрос"],
             limit: Annotated[int, "Максимальное количество результатов"] = 10,
@@ -547,7 +547,7 @@ class MemoryTools:
                 self.logger.error(error_msg)
                 return [types.TextContent(type="text", text=error_msg)]
         
-        @mcp.RegisterTool2(name="list_memories", description="Получить список всех воспоминаний")
+        @mcp.register_tool(name="list_memories", description="Получить список всех воспоминаний")
         def list_memories(
             limit: Annotated[int, "Максимальное количество воспоминаний"] = 20
         ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
@@ -586,7 +586,7 @@ class MemoryTools:
                 self.logger.error(error_msg)
                 return [types.TextContent(type="text", text=error_msg)]
         
-        @mcp.RegisterTool2(name="delete_memory", description="Удалить воспоминание по ID")
+        @mcp.register_tool(name="delete_memory", description="Удалить воспоминание по ID")
         def delete_memory(
             memory_id: Annotated[int, "ID воспоминания для удаления"]
         ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
@@ -610,7 +610,7 @@ class MemoryTools:
                 self.logger.error(error_msg)
                 return [types.TextContent(type="text", text=error_msg)]
         
-        @mcp.RegisterTool2(name="cleanup_memory", description="Очистка старых и неважных воспоминаний")
+        @mcp.register_tool(name="cleanup_memory", description="Очистка старых и неважных воспоминаний")
         def cleanup_memory(
             max_age_days: Annotated[int, "Максимальный возраст воспоминаний в днях"] = 30,
             max_count: Annotated[int, "Максимальное количество воспоминаний"] = 1000
@@ -629,7 +629,7 @@ class MemoryTools:
                 self.logger.error(error_msg)
                 return [types.TextContent(type="text", text=error_msg)]
         
-        @mcp.RegisterTool(name="memory_stats", description="Получить статистику системы памяти")
+        @mcp.register_tool(name="memory_stats", description="Получить статистику системы памяти")
         def memory_stats() -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
             try:
                 with sqlite3.connect(self.memory_system.db_path) as conn:

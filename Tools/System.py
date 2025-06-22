@@ -1,4 +1,4 @@
-from MCP_Tools import MCP_Tools
+from Data.MCP_Tools import MCP_Tools
 import mcp.types as types
 import datetime
 
@@ -8,7 +8,7 @@ class SystemTools:
 
 
 
-		@mcp.RegisterTool(name="gettime", description="Получить текущее время")
+		@mcp.register_tool(name="gettime", description="Получить текущее время")
 		def gettime()->list[types.TextContent
 		| types.ImageContent
 		| types.EmbeddedResource]:

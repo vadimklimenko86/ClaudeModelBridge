@@ -16,7 +16,7 @@ from http import HTTPStatus
 from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 
-from event_store import InMemoryEventStore
+from Data.event_store import InMemoryEventStore
 from Data.oauth2 import OAuth2Manager
 
 

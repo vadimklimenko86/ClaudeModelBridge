@@ -1,4 +1,4 @@
-from MCP_Tools import MCP_Tools
+from Data.MCP_Tools import MCP_Tools
 import mcp.types as types
 import datetime
 import os
@@ -107,7 +107,7 @@ class FileSystemTools:
     def _register_tools(self, mcp: MCP_Tools):
         """Регистрация всех инструментов"""
         
-        @mcp.RegisterTool(name="listfiles", description="Получить список файлов и папок")
+        @mcp.register_tool(name="listfiles", description="Получить список файлов и папок")
         def listfiles() -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
             try:
                 items = []
@@ -129,7 +129,7 @@ class FileSystemTools:
                 self.logger.error(error_msg)
                 return [types.TextContent(type="text", text=error_msg)]
         
-        @mcp.RegisterTool2(name="savefile", description="Сохранить файл")
+        @mcp.register_tool(name="savefile", description="Сохранить файл")
         def savefile(
             path: Annotated[str, "Путь к файлу"],
             content: Annotated[str, "Содержимое файла"],
@@ -156,7 +156,7 @@ class FileSystemTools:
                 self.logger.error(f"Failed to save file '{path}': {str(e)}")
                 return [types.TextContent(type="text", text=error_msg)]
         
-        @mcp.RegisterTool2(name="readfile", description="Прочитать файл")
+        @mcp.register_tool(name="readfile", description="Прочитать файл")
         def readfile(
             path: Annotated[str, "Путь к файлу"],
             encoding: Annotated[str, "Кодировка файла"] = "utf-8"
@@ -187,7 +187,7 @@ class FileSystemTools:
                 self.logger.error(f"Failed to read file '{path}': {str(e)}")
                 return [types.TextContent(type="text", text=error_msg)]
         
-        @mcp.RegisterTool2(name="deletefile", description="Удалить файл")
+        @mcp.register_tool(name="deletefile", description="Удалить файл")
         def deletefile(
             path: Annotated[str, "Путь к файлу"]
         ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
@@ -216,7 +216,7 @@ class FileSystemTools:
                 self.logger.error(f"Failed to delete file '{path}': {str(e)}")
                 return [types.TextContent(type="text", text=error_msg)]
         
-        @mcp.RegisterTool2(name="createdir", description="Создать директорию")
+        @mcp.register_tool(name="createdir", description="Создать директорию")
         def createdir(
             path: Annotated[str, "Путь к директории"]
         ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
@@ -240,7 +240,7 @@ class FileSystemTools:
                 self.logger.error(f"Failed to create directory '{path}': {str(e)}")
                 return [types.TextContent(type="text", text=error_msg)]
         
-        @mcp.RegisterTool2(name="deletedir", description="Удалить директорию")
+        @mcp.register_tool(name="deletedir", description="Удалить директорию")
         def deletedir(
             path: Annotated[str, "Путь к директории"],
             recursive: Annotated[bool, "Рекурсивное удаление (удалить все содержимое)"] = False
@@ -282,7 +282,7 @@ class FileSystemTools:
                 self.logger.error(f"Failed to delete directory '{path}': {str(e)}")
                 return [types.TextContent(type="text", text=error_msg)]
         
-        @mcp.RegisterTool2(name="fileinfo", description="Получить информацию о файле или директории")
+        @mcp.register_tool(name="fileinfo", description="Получить информацию о файле или директории")
         def fileinfo(
             path: Annotated[str, "Путь к файлу или директории"]
         ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
@@ -329,7 +329,7 @@ class FileSystemTools:
                 self.logger.error(f"Failed to get file info for '{path}': {str(e)}")
                 return [types.TextContent(type="text", text=error_msg)]
         
-        @mcp.RegisterTool(name="getlogs", description="Получить логи операций файловой системы")
+        @mcp.register_tool(name="getlogs", description="Получить логи операций файловой системы")
         def getlogs() -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
             try:
                 if not os.path.exists(self.log_file):
