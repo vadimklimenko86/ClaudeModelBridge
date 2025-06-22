@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  mcp-server:
+    build: .
+    image: remote-mcp:latest
+    container_name: remote-mcp-server
+    ports:
+      - "8000:8000"
+    environment:
+      - MCP_ENV=production
+      - SECRET_KEY=${SECRET_KEY:-change_me_in_production}
+      - OAUTH2_ISSUER_URL=${OAUTH2_ISSUER_URL:-https://your-domain.com}
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://claude.ai}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Для продакшена с Redis
+      # - REDIS_URL=redis://redis:6379/0
+    # depends_on:
+    #   - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/.well-known/oauth-authorization-server"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - mcp-network
+    volumes:
+      # Для персистентности логов
+      - ./logs:/app/logs
+
+  # Redis для продакшена (раскомментировать при необходимости)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: mcp-redis
+  #   command: redis-server --appendonly yes
+  #   volumes:
+  #     - redis-data:/data
+  #   networks:
+  #     - mcp-network
+  #   restart: unless-stopped
+
+  # Nginx reverse proxy (опционально)
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: mcp-nginx
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./ssl:/etc/nginx/ssl:ro
+  #   depends_on:
+  #     - mcp-server
+  #   networks:
+  #     - mcp-network
+  #   restart: unless-stopped
+
+networks:
+  mcp-network:
+    driver: bridge
+
+volumes:
+  # redis-data:
+  logs:
