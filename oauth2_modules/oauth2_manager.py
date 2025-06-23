@@ -18,9 +18,11 @@ class OAuth2Manager:
 	def __init__(self,
 	             logger: logging.Logger,
 	             db_path: str = "InternalStorage/oauth2.db",
-	             use_database: bool = True) -> None:
+	             use_database: bool = True,
+	             issuer: str = None) -> None:
 		self.logger = logger
 		self.use_database = use_database
+		self.issuer: str = issuer
 
 		# Инициализируем базу данных если требуется
 		if self.use_database:
@@ -159,8 +161,8 @@ class OAuth2Manager:
 		    self.public_key,
 		    self.key_id,
 		    self.logger,
-		    self.database  # Передаем ссылку на базу данных
-		)
+		    self.database,  # Передаем ссылку на базу данных
+		    self.issuer)
 
 	@property
 	def routes(self):

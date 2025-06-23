@@ -41,11 +41,12 @@ logger.setLevel(logging.INFO)
     default=False,
     help="Enable JSON responses instead of SSE streams",
 )
-def main(
-    port: int,
-    log_level: str,
-    json_response: bool,
-) -> int:
+@click.option(
+    "--base-url",
+    type=str,
+    help="Base URL for the server",
+)
+def main(port: int, log_level: str, json_response: bool, base_url: str) -> int:
 	# Configure logging
 	logging.basicConfig(
 	    level=getattr(logging, log_level.upper()),
@@ -61,11 +62,7 @@ def main(
 	from Tools.FileSystem import FileSystemTools
 	from Tools.Memory import MemoryTools
 
-	[
-	    SystemTools(tools),
-	    FileSystemTools(tools),
-	    MemoryTools(tools)
-	]
+	[SystemTools(tools), FileSystemTools(tools), MemoryTools(tools)]
 
 	@mcp.call_tool()
 	async def call_tool(
@@ -81,7 +78,7 @@ def main(
 		return tools.get_tools_list()
 
 	from custom_server import CustomServerWithOauth2
-	routes = CustomServerWithOauth2(logger, mcp)
+	routes = CustomServerWithOauth2(logger, mcp, base_url)
 
 	import uvicorn
 	logger.info(f"Starting server on host=0.0.0.0, port={port}")

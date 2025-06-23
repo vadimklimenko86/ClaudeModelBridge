@@ -37,7 +37,7 @@ class SlashesMiddleware:
 class CustomServerWithOauth2:
 	"""Кастомный сервер MCP с поддержкой OAuth2"""
 
-	def __init__(self, logger: logging.Logger, serverapp: Server):
+	def __init__(self, logger: logging.Logger, serverapp: Server, base_url: str):
 		self.logger = logger
 		self.serverapp = serverapp
 
@@ -55,7 +55,7 @@ class CustomServerWithOauth2:
 		    app=serverapp, event_store=self.event_store, json_response=False)
 
 		# Инициализируем OAuth2 менеджер
-		self.oauth = OAuth2Manager(logger)
+		self.oauth = OAuth2Manager(logger, issuer=base_url)
 
 		# Настраиваем маршруты
 		routes = [
