@@ -61,7 +61,11 @@ def main(
 	from Tools.FileSystem import FileSystemTools
 	from Tools.Memory import MemoryTools
 
-	[SystemTools(tools), FileSystemTools(tools), MemoryTools(tools)]
+	[
+	    SystemTools(tools),
+	    FileSystemTools(tools),
+	    MemoryTools(tools)
+	]
 
 	@mcp.call_tool()
 	async def call_tool(
@@ -70,12 +74,11 @@ def main(
 	          | types.ImageContent
 	          | types.EmbeddedResource]:
 		ctx = mcp.request_context
-		return tools.execute_tool(name,arguments)
+		return tools.execute_tool(name, arguments)
 
 	@mcp.list_tools()
 	async def list_tools() -> list[types.Tool]:
 		return tools.get_tools_list()
-								
 
 	from custom_server import CustomServerWithOauth2
 	routes = CustomServerWithOauth2(logger, mcp)
