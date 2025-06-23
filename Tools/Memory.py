@@ -58,7 +58,7 @@ class MemoryNode:
 class MemorySystem:
     """Система рекурсивной памяти"""
 
-    def __init__(self, db_path: str = "Tools/memory.db"):
+    def __init__(self, db_path: str = "InternalStorage/memory.db"):
         self.db_path = db_path
         self.lock = threading.RLock()
         self.logger = logging.getLogger('MemorySystem')

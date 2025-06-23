@@ -14,11 +14,12 @@ class FileSystemTools:
     def __init__(self, mcp: MCP_Tools) -> None:
         # Настройка часового пояса и рабочей директории
         self.tz_plus3 = datetime.timezone(datetime.timedelta(hours=3))
-        self.working_dir = "/"
+        self.working_dir = "."
         self.log_file = os.path.join("Tools", "filesystem.log")
 
         # Создание рабочей директории
-        os.makedirs(self.working_dir, exist_ok=True)
+        if not self.working_dir == None:
+            os.makedirs(self.working_dir, exist_ok=True)
 
         # Настройка логирования
         self._setup_logging()
@@ -114,14 +115,17 @@ class FileSystemTools:
 
         @mcp.register_tool(name="listfiles",
                            description="Получить список файлов и папок")
-        def listfiles() -> list[types.TextContent | types.ImageContent
-                                | types.EmbeddedResource]:
+        def listfiles(
+            path: Annotated[str, "Путь к директории"] = "."
+        ) -> list[types.TextContent | types.ImageContent
+                  | types.EmbeddedResource]:
             try:
                 items = []
-                for item in os.listdir(self.working_dir):
+                safe_path = self._get_safe_path(path)               
+                for item in os.listdir(safe_path):
                     if item == "filesystem.log":  # Скрываем лог-файл из обычного списка
                         continue
-                    item_path = os.path.join(self.working_dir, item)
+                    item_path = os.path.join(safe_path, item)
                     if os.path.isdir(item_path):
                         items.append(f"📁 {item}/")
                     else:

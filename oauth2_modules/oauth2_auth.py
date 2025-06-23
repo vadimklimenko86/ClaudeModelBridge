@@ -1,4 +1,4 @@
-"""OAuth 2.0 Authorization and Authentication"""
+"""OAuth 2.0 Authorization and Authentication with SQLite database support"""
 
 import secrets
 import time
@@ -12,12 +12,17 @@ from .oauth2_client import OAuth2Client
 
 
 class OAuth2AuthManager:
-	"""Класс для управления авторизацией и аутентификацией"""
+	"""Класс для управления авторизацией и аутентификацией с поддержкой SQLite базы данных"""
 
-	def __init__(self, clients: Dict[str, OAuth2Client], users: Dict):
+	def __init__(self, clients: Dict[str, OAuth2Client], users: Dict, database=None):
 		self.clients = clients
-		self.users = users
-		self.authorization_codes: Dict[str, dict] = {}
+		self.users = users  # Для совместимости
+		self.database = database
+		
+		# Резервные хранилища (для режима без БД)
+		if not self.database:
+			self.authorization_codes: Dict[str, dict] = {}
+		
 		# Временное хранилище для сессий (в продакшене использовать Redis или базу данных)
 		self.sessions: Dict[str, dict] = {}
 
@@ -33,6 +38,60 @@ class OAuth2AuthManager:
 			}
 			
 		return session_id, self.sessions[session_id]['data']
+
+	def _get_user(self, user_id: str) -> Optional[Dict]:
+		"""Получить пользователя из БД или из памяти"""
+		if self.database:
+			return self.database.get_user(user_id)
+		else:
+			return self.users.get(user_id)
+
+	def _get_user_by_email(self, email: str) -> Optional[Dict]:
+		"""Получить пользователя по email из БД или из памяти"""
+		if self.database:
+			return self.database.get_user_by_email(email)
+		else:
+			for user in self.users.values():
+				if user.get('email') == email:
+					return user
+			return None
+
+	def _save_authorization_code(self, code: str, code_data: dict) -> bool:
+		"""Сохранить код авторизации в БД или в память"""
+		if self.database:
+			return self.database.save_authorization_code(
+				code=code,
+				user_id=code_data['user_id'],
+				client_id=code_data['client_id'],
+				scope=code_data['scope'],
+				redirect_uri=code_data['redirect_uri'],
+				expires_at=code_data['expires_at'],
+				code_challenge=code_data.get('code_challenge'),
+				code_challenge_method=code_data.get('code_challenge_method')
+			)
+		else:
+			self.authorization_codes[code] = code_data
+			return True
+
+	def _get_authorization_code(self, code: str) -> Optional[Dict]:
+		"""Получить код авторизации из БД или из памяти"""
+		if self.database:
+			return self.database.get_authorization_code(code)
+		else:
+			code_data = self.authorization_codes.get(code)
+			if code_data and not code_data.get('used', False) and code_data['expires_at'] > time.time():
+				return code_data
+			return None
+
+	def _use_authorization_code(self, code: str) -> bool:
+		"""Пометить код авторизации как использованный"""
+		if self.database:
+			return self.database.use_authorization_code(code)
+		else:
+			if code in self.authorization_codes:
+				self.authorization_codes[code]['used'] = True
+				return True
+			return False
 
 	async def handle_authorization_request(self, request: Request) -> Response:
 		"""Обработка authorization request"""
@@ -86,7 +145,7 @@ class OAuth2AuthManager:
 		# Пользователь авторизован, генерируем authorization code
 		auth_code = secrets.token_urlsafe(32)
 
-		self.authorization_codes[auth_code] = {
+		code_data = {
 			'client_id': client_id,
 			'user_id': session_data['user_id'],
 			'redirect_uri': redirect_uri,
@@ -96,6 +155,9 @@ class OAuth2AuthManager:
 			'expires_at': time.time() + 600,  # 10 минут
 			'used': False
 		}
+
+		# Сохраняем код авторизации
+		self._save_authorization_code(auth_code, code_data)
 
 		# Формируем URL для редиректа
 		params = {'code': auth_code}
@@ -132,7 +194,7 @@ class OAuth2AuthManager:
 		# Используем сохраненные параметры для генерации кода
 		auth_code = secrets.token_urlsafe(32)
 		
-		self.authorization_codes[auth_code] = {
+		code_data = {
 			'client_id': client_id,
 			'user_id': session_data['user_id'],
 			'redirect_uri': redirect_uri,
@@ -142,6 +204,9 @@ class OAuth2AuthManager:
 			'expires_at': time.time() + 600,
 			'used': False
 		}
+
+		# Сохраняем код авторизации
+		self._save_authorization_code(auth_code, code_data)
 
 		# Очищаем OAuth параметры из сессии
 		session_data.pop('oauth_params', None)
@@ -163,13 +228,13 @@ class OAuth2AuthManager:
 		password = form_data.get('password')
 
 		# Проверка пользователя
-		user = self.users.get(email)
+		user = self._get_user_by_email(email)
 		if not user or hashlib.sha256(password.encode()).hexdigest() != user['password_hash']:
 			session_data['login_error'] = "Неверный email или пароль"
 			return RedirectResponse(url='/oauth/login', status_code=302)
 
 		# Сохраняем пользователя в сессии
-		session_data['user_id'] = email
+		session_data['user_id'] = user['user_id']  # Используем user_id из базы данных
 		session_data.pop('login_error', None)
 
 		# Если есть сохраненные OAuth параметры, показываем страницу согласия
@@ -238,6 +303,7 @@ class OAuth2AuthManager:
 					border-radius: 4px;
 					font-size: 1rem;
 					transition: border-color 0.2s;
+					box-sizing: border-box;
 				}}
 				input[type="email"]:focus,
 				input[type="password"]:focus {{
@@ -275,6 +341,15 @@ class OAuth2AuthManager:
 					font-size: 0.875rem;
 					color: #1976d2;
 				}}
+				.db-status {{
+					margin-top: 0.5rem;
+					padding: 0.5rem;
+					background: #e8f5e8;
+					border-radius: 4px;
+					font-size: 0.75rem;
+					color: #2e7d32;
+					text-align: center;
+				}}
 			</style>
 		</head>
 		<body>
@@ -296,6 +371,7 @@ class OAuth2AuthManager:
 						Email: user@example.com<br>
 						Пароль: password123
 					</div>
+					{'<div class="db-status">🗄️ База данных SQLite активна</div>' if self.database else '<div class="db-status">💾 Режим работы в памяти</div>'}
 				</form>
 			</div>
 		</body>
@@ -305,6 +381,53 @@ class OAuth2AuthManager:
 		response = Response(content=html, media_type="text/html")
 		response.set_cookie('session_id', session_id, httponly=True, secure=True, samesite='lax')
 		return response
+
+	def get_authorization_code_data(self, code: str) -> Optional[Dict]:
+		"""Получить данные кода авторизации (для использования в endpoints)"""
+		return self._get_authorization_code(code)
+
+	def use_authorization_code(self, code: str) -> bool:
+		"""Пометить код авторизации как использованный (для использования в endpoints)"""
+		return self._use_authorization_code(code)
+
+	def cleanup_expired_codes(self) -> int:
+		"""Очистка истекших кодов авторизации"""
+		if self.database:
+			# Вызывается через database.cleanup_expired_tokens()
+			return 0
+		else:
+			current_time = time.time()
+			expired_codes = [
+				code for code, data in self.authorization_codes.items()
+				if data['expires_at'] <= current_time
+			]
+			
+			for code in expired_codes:
+				del self.authorization_codes[code]
+			
+			return len(expired_codes)
+
+	def get_auth_stats(self) -> Dict:
+		"""Получение статистики авторизации"""
+		if self.database:
+			stats = self.database.get_stats()
+			return {
+				'active_authorization_codes': stats['active_authorization_codes'],
+				'active_sessions': len(self.sessions),
+				'database_enabled': True
+			}
+		else:
+			current_time = time.time()
+			active_codes = sum(
+				1 for data in self.authorization_codes.values()
+				if not data.get('used', False) and data['expires_at'] > current_time
+			)
+			
+			return {
+				'active_authorization_codes': active_codes,
+				'active_sessions': len(self.sessions),
+				'database_enabled': False
+			}
 
 	def _error_redirect(self, redirect_uri: str, error: str, state: Optional[str] = None) -> Response:
 		"""Редирект с ошибкой"""
@@ -417,6 +540,15 @@ class OAuth2AuthManager:
 				.deny:hover {{
 					background: #c82333;
 				}}
+				.db-status {{
+					margin-top: 1rem;
+					padding: 0.5rem;
+					background: #e8f5e8;
+					border-radius: 4px;
+					font-size: 0.75rem;
+					color: #2e7d32;
+					text-align: center;
+				}}
 			</style>
 		</head>
 		<body>
@@ -437,6 +569,7 @@ class OAuth2AuthManager:
 						<button type="submit" name="consent" value="deny" class="deny">Отклонить</button>
 					</div>
 				</form>
+				{'<div class="db-status">🗄️ База данных SQLite активна</div>' if self.database else '<div class="db-status">💾 Режим работы в памяти</div>'}
 			</div>
 		</body>
 		</html>

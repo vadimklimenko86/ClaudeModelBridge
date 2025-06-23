@@ -128,7 +128,7 @@ class CustomServerWithOauth2:
 		token = auth_header.split(' ', 1)[1]
 
 		# Проверяем токен через OAuth2 менеджер
-		if token not in self.oauth.token_manager.access_tokens:
+		if not self.oauth.token_manager.validate_access_token(token)[0]:
 			self.logger.warning(f"Invalid token: {token[:10]}...")
 
 			error_response = {
@@ -149,8 +149,10 @@ class CustomServerWithOauth2:
 			await response(scope, receive, send)
 			return
 
+		validated_token = self.oauth.token_manager.validate_access_token(token)
 		# Проверяем срок действия токена
-		token_data = self.oauth.token_manager.access_tokens[token]
+		#token_data = self.oauth.token_manager.access_tokens[token]
+		token_data = validated_token[1]
 		import time
 		if token_data['expires_at'] < time.time():
 			self.logger.warning(f"Expired token: {token[:10]}...")

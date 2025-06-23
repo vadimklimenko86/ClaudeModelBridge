@@ -1,4 +1,4 @@
-"""OAuth 2.0 Endpoints and Routing"""
+"""OAuth 2.0 Endpoints and Routing with SQLite database support"""
 
 import inspect
 import secrets
@@ -15,10 +15,10 @@ from .oauth2_client import OAuth2Client
 
 
 class OAuth2Endpoints:
-	"""Класс для управления endpoints OAuth 2.0"""
+	"""Класс для управления endpoints OAuth 2.0 с поддержкой SQLite базы данных"""
 
 	def __init__(self, token_manager, auth_manager, clients: Dict[str, OAuth2Client], 
-				 users: Dict, private_key, public_key, key_id: str, logger):
+				 users: Dict, private_key, public_key, key_id: str, logger, database=None):
 		self.token_manager = token_manager
 		self.auth_manager = auth_manager
 		self.clients = clients
@@ -27,8 +27,16 @@ class OAuth2Endpoints:
 		self.public_key = public_key
 		self.key_id = key_id
 		self.logger = logger
+		self.database = database
 		self.routes: List[Route] = []
 		self._register_routes()
+
+	def _get_user(self, user_id: str) -> dict:
+		"""Получить пользователя из БД или из памяти"""
+		if self.database:
+			return self.database.get_user(user_id)
+		else:
+			return self.users.get(user_id)
 
 	def get_base_url(self, request: Request) -> str:
 		"""Получить правильный базовый URL"""
@@ -144,6 +152,15 @@ class OAuth2Endpoints:
 		async def revoke_token(request: Request):
 			return await self.handle_token_revocation(request)
 
+		# Admin endpoints для управления системой
+		@route('/oauth/admin/stats')
+		async def admin_stats(request: Request):
+			return self.handle_admin_stats(request)
+
+		@route('/oauth/admin/cleanup', methods=['POST'])
+		async def admin_cleanup(request: Request):
+			return await self.handle_admin_cleanup(request)
+
 	async def get_authorization_server_metadata(self, request: Request) -> JSONResponse:
 		"""RFC 8414 - OAuth 2.0 Authorization Server Metadata"""
 		base_url = self.get_base_url(request)
@@ -204,6 +221,9 @@ class OAuth2Endpoints:
 			"frontchannel_logout_session_supported": False,
 			"backchannel_logout_supported": False,
 			"backchannel_logout_session_supported": False,
+
+			# Дополнительная информация о системе
+			"database_enabled": self.database is not None,
 		}
 		
 		return JSONResponse(metadata, headers={
@@ -269,24 +289,38 @@ class OAuth2Endpoints:
 				status_code=400
 			)
 
-		# Валидация authorization code
-		if code not in self.auth_manager.authorization_codes:
-			return JSONResponse({"error": "invalid_grant", "error_description": "Invalid authorization code"}, status_code=400)
-
-		code_data = self.auth_manager.authorization_codes[code]
+		# Валидация authorization code через auth_manager
+		code_data = self.auth_manager.get_authorization_code_data(code)
+		if not code_data:
+			return JSONResponse(
+				{"error": "invalid_grant", "error_description": "Invalid authorization code"}, 
+				status_code=400
+			)
 
 		# Проверки валидности кода
-		if code_data['used']:
-			return JSONResponse({"error": "invalid_grant", "error_description": "Authorization code already used"}, status_code=400)
+		if code_data.get('is_used', False):
+			return JSONResponse(
+				{"error": "invalid_grant", "error_description": "Authorization code already used"}, 
+				status_code=400
+			)
 			
 		if code_data['expires_at'] < time.time():
-			return JSONResponse({"error": "invalid_grant", "error_description": "Authorization code expired"}, status_code=400)
+			return JSONResponse(
+				{"error": "invalid_grant", "error_description": "Authorization code expired"}, 
+				status_code=400
+			)
 
 		if code_data['client_id'] != client_id:
-			return JSONResponse({"error": "invalid_grant", "error_description": "Client mismatch"}, status_code=400)
+			return JSONResponse(
+				{"error": "invalid_grant", "error_description": "Client mismatch"}, 
+				status_code=400
+			)
 
 		if code_data['redirect_uri'] != redirect_uri:
-			return JSONResponse({"error": "invalid_grant", "error_description": "Redirect URI mismatch"}, status_code=400)
+			return JSONResponse(
+				{"error": "invalid_grant", "error_description": "Redirect URI mismatch"}, 
+				status_code=400
+			)
 
 		# Проверка клиента (для конфиденциальных клиентов)
 		client = self.clients.get(client_id)
@@ -298,17 +332,31 @@ class OAuth2Endpoints:
 		# PKCE проверка
 		if code_data.get('code_challenge'):
 			if not code_verifier:
-				return JSONResponse({"error": "invalid_request", "error_description": "Missing code_verifier"}, status_code=400)
+				return JSONResponse(
+					{"error": "invalid_request", "error_description": "Missing code_verifier"}, 
+					status_code=400
+				)
 
-			if not self.token_manager.verify_pkce(code_verifier, code_data['code_challenge'], code_data.get('code_challenge_method', 'plain')):
-				return JSONResponse({"error": "invalid_grant", "error_description": "Invalid code_verifier"}, status_code=400)
+			if not self.token_manager.verify_pkce(
+				code_verifier, 
+				code_data['code_challenge'], 
+				code_data.get('code_challenge_method', 'plain')
+			):
+				return JSONResponse(
+					{"error": "invalid_grant", "error_description": "Invalid code_verifier"}, 
+					status_code=400
+				)
 
 		# Помечаем код как использованный
-		code_data['used'] = True
+		self.auth_manager.use_authorization_code(code)
 
 		# Генерируем токены
-		access_token = self.token_manager.generate_access_token(code_data['user_id'], client_id, code_data['scope'])
-		refresh_token = self.token_manager.generate_refresh_token(code_data['user_id'], client_id, code_data['scope'])
+		access_token = self.token_manager.generate_access_token(
+			code_data['user_id'], client_id, code_data['scope']
+		)
+		refresh_token = self.token_manager.generate_refresh_token(
+			code_data['user_id'], client_id, code_data['scope']
+		)
 
 		response = {
 			"access_token": access_token,
@@ -321,7 +369,9 @@ class OAuth2Endpoints:
 		# ID Token для OpenID Connect
 		if 'openid' in code_data['scope']:
 			base_url = self.get_base_url(request)
-			id_token = self.token_manager.generate_id_token(request, code_data['user_id'], client_id, access_token, base_url, self.users)
+			id_token = self.token_manager.generate_id_token(
+				request, code_data['user_id'], client_id, access_token, base_url
+			)
 			response["id_token"] = id_token
 
 		return JSONResponse(response)
@@ -385,7 +435,7 @@ class OAuth2Endpoints:
 		scopes = token_data['scope'].split()
 		
 		user_id = token_data['user_id']
-		user = self.users.get(user_id)
+		user = self._get_user(user_id)
 
 		if not user:
 			return JSONResponse({"error": "invalid_token"}, status_code=401)
@@ -440,6 +490,22 @@ class OAuth2Endpoints:
 			scopes=data.get('scope', 'openid profile email').split()
 		)
 
+		# Сохраняем клиента
+		if self.database:
+			success = self.database.create_client(
+				client_id=client_id,
+				client_secret=client_secret,
+				name=client.name,
+				redirect_uris=redirect_uris,
+				grant_types=client.grant_types,
+				scopes=client.scopes
+			)
+			if not success:
+				return JSONResponse(
+					{"error": "server_error", "error_description": "Failed to create client"}, 
+					status_code=500
+				)
+
 		self.clients[client_id] = client
 
 		response = {
@@ -455,3 +521,44 @@ class OAuth2Endpoints:
 		}
 
 		return JSONResponse(response, status_code=201)
+
+	def handle_admin_stats(self, request: Request) -> JSONResponse:
+		"""Административная статистика"""
+		if self.database:
+			stats = self.database.get_stats()
+			stats['sessions_count'] = len(self.auth_manager.sessions)
+		else:
+			token_stats = self.token_manager.get_token_stats()
+			auth_stats = self.auth_manager.get_auth_stats()
+			stats = {
+				'clients_count': len(self.clients),
+				'users_count': len(self.users),
+				'active_access_tokens': token_stats['active_access_tokens'],
+				'active_refresh_tokens': token_stats['active_refresh_tokens'],
+				'active_authorization_codes': auth_stats['active_authorization_codes'],
+				'sessions_count': auth_stats['active_sessions'],
+				'database_enabled': False
+			}
+
+		return JSONResponse({
+			'status': 'success',
+			'stats': stats,
+			'timestamp': time.time()
+		})
+
+	async def handle_admin_cleanup(self, request: Request) -> JSONResponse:
+		"""Административная очистка устаревших данных"""
+		cleaned_tokens = self.token_manager.cleanup_expired_tokens()
+		cleaned_codes = self.auth_manager.cleanup_expired_codes()
+		
+		total_cleaned = cleaned_tokens + cleaned_codes
+		
+		return JSONResponse({
+			'status': 'success',
+			'cleaned': {
+				'tokens': cleaned_tokens,
+				'authorization_codes': cleaned_codes,
+				'total': total_cleaned
+			},
+			'timestamp': time.time()
+		})
