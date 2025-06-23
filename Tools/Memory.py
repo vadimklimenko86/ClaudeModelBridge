@@ -230,11 +230,13 @@ class MemorySystem:
                         """
                         INSERT INTO memories (content, summary, importance, access_count, timestamp, embedding_json, metadata_json, content_hash)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (memory_node.content, memory_node.summary,
-                          memory_node.importance, memory_node.access_count,
-                          memory_node.timestamp.isoformat(),
-                          json.dumps(memory_node.embedding),
-                          json.dumps(memory_node.metadata), content_hash))
+                    """,
+                        (memory_node.content, memory_node.summary,
+                         memory_node.importance, memory_node.access_count,
+                         memory_node.timestamp.isoformat(),
+                         json.dumps(memory_node.embedding, ensure_ascii=False),
+                         json.dumps(memory_node.metadata,
+                                    ensure_ascii=False), content_hash))
                     memory_id = cursor.lastrowid
 
                 self.logger.info(f"Memory added with ID: {memory_id}")

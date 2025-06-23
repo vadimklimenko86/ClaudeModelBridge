@@ -17,7 +17,8 @@ from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 
 from event_store import InMemoryEventStore
-from oauth2 import OAuth2Manager
+#from oauth2 import OAuth2Manager
+from oauth2_modules import OAuth2Manager
 
 
 class SlashesMiddleware:
@@ -127,7 +128,7 @@ class CustomServerWithOauth2:
 		token = auth_header.split(' ', 1)[1]
 
 		# Проверяем токен через OAuth2 менеджер
-		if token not in self.oauth.access_tokens:
+		if token not in self.oauth.token_manager.access_tokens:
 			self.logger.warning(f"Invalid token: {token[:10]}...")
 
 			error_response = {
@@ -149,7 +150,7 @@ class CustomServerWithOauth2:
 			return
 
 		# Проверяем срок действия токена
-		token_data = self.oauth.access_tokens[token]
+		token_data = self.oauth.token_manager.access_tokens[token]
 		import time
 		if token_data['expires_at'] < time.time():
 			self.logger.warning(f"Expired token: {token[:10]}...")
