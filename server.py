@@ -16,8 +16,8 @@ from starlette.requests import Request
 from starlette.routing import Mount, Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from Data.event_store import InMemoryEventStore
-from Data.MCP_Tools import MCP_Tools
+from event_store import InMemoryEventStore
+from MCP_Tools import MCP_Tools
 import datetime
 from mcp.shared.context import RequestContext
 #logger = logging.getLogger("u(vicorn")
@@ -58,8 +58,8 @@ def main(
 	tools = MCP_Tools(mcp)
 
 	from Tools.System import SystemTools
-	from Tools.FileSystem_improved import FileSystemTools
-	from Tools.Memory_fixed import MemoryTools
+	from Tools.FileSystem import FileSystemTools
+	from Tools.Memory import MemoryTools
 
 	[SystemTools(tools), FileSystemTools(tools), MemoryTools(tools)]
 
@@ -77,7 +77,7 @@ def main(
 		return tools.get_tools_list()
 								
 
-	from Data.custom_server import CustomServerWithOauth2
+	from custom_server import CustomServerWithOauth2
 	routes = CustomServerWithOauth2(logger, mcp)
 
 	import uvicorn

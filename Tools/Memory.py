@@ -6,6 +6,7 @@ import logging
 import json
 import asyncio
 import math
+import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Annotated, Any
 from pathlib import Path
@@ -55,7 +56,7 @@ class MemoryNode:
 class MemorySystem:
     """Система рекурсивной памяти"""
     
-    def __init__(self, db_path: str = "Tools/memory.db"):
+    def __init__(self, db_path: str = "memory.db"):
         self.db_path = db_path
         self.lock = threading.RLock()
         self.logger = logging.getLogger('MemorySystem')
@@ -73,7 +74,7 @@ class MemorySystem:
     
     def _setup_database(self):
         """Инициализация базы данных SQLite"""
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        os.makedirs(os.path.dirname(self.db_path) if os.path.dirname(self.db_path) else ".", exist_ok=True)
         
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
@@ -101,6 +102,22 @@ class MemorySystem:
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_content_hash ON memories(content_hash)
             """)
+    
+    def _get_embedding_sync(self, text: str) -> Optional[List[float]]:
+        """Синхронная версия получения эмбеддинга"""
+        if not self.openai_client:
+            self.logger.warning("OpenAI client not available, using simple hash-based embedding")
+            return self._simple_embedding(text)
+        
+        try:
+            response = self.openai_client.embeddings.create(
+                model="text-embedding-3-small",
+                input=text
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            self.logger.error(f"Failed to get OpenAI embedding: {e}")
+            return self._simple_embedding(text)
     
     async def _get_embedding(self, text: str) -> Optional[List[float]]:
         """Получение эмбеддинга текста через OpenAI API"""
@@ -176,13 +193,13 @@ class MemorySystem:
         """Создание хеша содержимого для проверки дубликатов"""
         return hashlib.sha256(content.encode()).hexdigest()
     
-    async def add_memory(self, content: str, importance: float = 1.0, metadata: Optional[Dict[str, Any]] = None) -> int:
-        """Добавление новой записи в память"""
+    def add_memory_sync(self, content: str, importance: float = 1.0, metadata: Optional[Dict[str, Any]] = None) -> int:
+        """Синхронная версия добавления воспоминания"""
         if not content.strip():
             raise ValueError("Содержимое памяти не может быть пустым")
         
         content_hash = self._content_hash(content)
-        embedding = await self._get_embedding(content)
+        embedding = self._get_embedding_sync(content)
         
         if not embedding:
             raise RuntimeError("Не удалось создать эмбеддинг для содержимого")
@@ -227,12 +244,16 @@ class MemorySystem:
                     result = cursor.fetchone()
                     return result[0] if result else -1
     
-    async def search_memories(self, query: str, limit: int = 10, min_similarity: float = SIMILARITY_THRESHOLD) -> List[Dict[str, Any]]:
-        """Поиск воспоминаний по запросу"""
+    async def add_memory(self, content: str, importance: float = 1.0, metadata: Optional[Dict[str, Any]] = None) -> int:
+        """Добавление новой записи в память"""
+        return await asyncio.to_thread(self.add_memory_sync, content, importance, metadata)
+    
+    def search_memories_sync(self, query: str, limit: int = 10, min_similarity: float = SIMILARITY_THRESHOLD) -> List[Dict[str, Any]]:
+        """Синхронная версия поиска воспоминаний"""
         if not query.strip():
             return []
         
-        query_embedding = await self._get_embedding(query)
+        query_embedding = self._get_embedding_sync(query)
         if not query_embedding:
             self.logger.error("Failed to create embedding for query")
             return []
@@ -285,8 +306,12 @@ class MemorySystem:
                 results.sort(key=lambda x: x['similarity'], reverse=True)
                 return results[:limit]
     
-    async def get_all_memories(self, limit: int = 100) -> List[Dict[str, Any]]:
-        """Получение всех воспоминаний"""
+    async def search_memories(self, query: str, limit: int = 10, min_similarity: float = SIMILARITY_THRESHOLD) -> List[Dict[str, Any]]:
+        """Поиск воспоминаний по запросу"""
+        return await asyncio.to_thread(self.search_memories_sync, query, limit, min_similarity)
+    
+    def get_all_memories_sync(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Синхронная версия получения всех воспоминаний"""
         with self.lock:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.execute("""
@@ -323,8 +348,12 @@ class MemorySystem:
                 
                 return results
     
-    async def delete_memory(self, memory_id: int) -> bool:
-        """Удаление воспоминания по ID"""
+    async def get_all_memories(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Получение всех воспоминаний"""
+        return await asyncio.to_thread(self.get_all_memories_sync, limit)
+    
+    def delete_memory_sync(self, memory_id: int) -> bool:
+        """Синхронная версия удаления воспоминания"""
         with self.lock:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
@@ -337,8 +366,12 @@ class MemorySystem:
                 
                 return deleted
     
-    async def cleanup_old_memories(self, max_age_days: int = 30, max_count: int = 1000) -> int:
-        """Очистка старых и неважных воспоминаний"""
+    async def delete_memory(self, memory_id: int) -> bool:
+        """Удаление воспоминания по ID"""
+        return await asyncio.to_thread(self.delete_memory_sync, memory_id)
+    
+    def cleanup_old_memories_sync(self, max_age_days: int = 30, max_count: int = 1000) -> int:
+        """Синхронная версия очистки старых воспоминаний"""
         cutoff_date = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=max_age_days)
         
         with self.lock:
@@ -369,6 +402,10 @@ class MemorySystem:
                 
                 self.logger.info(f"Cleaned up {deleted_count} old memories")
                 return deleted_count
+    
+    async def cleanup_old_memories(self, max_age_days: int = 30, max_count: int = 1000) -> int:
+        """Очистка старых и неважных воспоминаний"""
+        return await asyncio.to_thread(self.cleanup_old_memories_sync, max_age_days, max_count)
 
 class MemoryTools:
     """Инструменты для работы с памятью в MCP"""
@@ -389,10 +426,37 @@ class MemoryTools:
         self._register_tools(mcp)
         self.logger.info("MemoryTools initialized")
     
+    def _safe_run_async(self, coro):
+        """Безопасный запуск асинхронного кода в MCP контексте"""
+        try:
+            # Проверяем, есть ли активный event loop
+            loop = asyncio.get_running_loop()
+            # Создаем задачу в текущем loop
+            future = asyncio.ensure_future(coro, loop=loop)
+            # Ждем выполнения с таймаутом
+            timeout = 30  # 30 секунд таймаут
+            start_time = time.time()
+            while not future.done() and (time.time() - start_time) < timeout:
+                time.sleep(0.01)
+            
+            if future.done():
+                return future.result()
+            else:
+                future.cancel()
+                raise TimeoutError("Async operation timed out")
+                
+        except RuntimeError:
+            # Если нет активного loop, используем синхронные версии
+            self.logger.info("No active event loop, using sync versions")
+            return None
+        except Exception as e:
+            self.logger.error(f"Error in async execution: {e}")
+            raise
+    
     def _register_tools(self, mcp: MCP_Tools):
         """Регистрация всех инструментов памяти"""
         
-        @mcp.RegisterTool2(name="add_memory", description="Добавить новое воспоминание в память")
+        @mcp.register_tool(name="add_memory", description="Добавить новое воспоминание в память")
         def add_memory(
             content: Annotated[str, "Содержимое воспоминания"],
             importance: Annotated[float, "Важность воспоминания (0.0-10.0)"] = 1.0,
@@ -408,8 +472,8 @@ class MemoryTools:
                     metadata['tags'] = [tag.strip() for tag in tags.split(',') if tag.strip()]
                 metadata['created_at'] = datetime.datetime.now(self.tz_plus3).isoformat()
                 
-                # Асинхронный вызов через asyncio
-                memory_id = asyncio.run(self.memory_system.add_memory(content, importance, metadata))
+                # Используем синхронную версию
+                memory_id = self.memory_system.add_memory_sync(content, importance, metadata)
                 
                 if memory_id > 0:
                     self.logger.info(f"Added memory with ID: {memory_id}")
@@ -428,7 +492,7 @@ class MemoryTools:
                 self.logger.error(error_msg)
                 return [types.TextContent(type="text", text=error_msg)]
         
-        @mcp.RegisterTool2(name="search_memory", description="Поиск воспоминаний по запросу")
+        @mcp.register_tool(name="search_memory", description="Поиск воспоминаний по запросу")
         def search_memory(
             query: Annotated[str, "Поисковый запрос"],
             limit: Annotated[int, "Максимальное количество результатов"] = 10,
@@ -438,8 +502,8 @@ class MemoryTools:
                 if not query.strip():
                     return [types.TextContent(type="text", text="Ошибка: Поисковый запрос не может быть пустым")]
                 
-                # Асинхронный поиск
-                results = asyncio.run(self.memory_system.search_memories(query, limit, min_similarity))
+                # Используем синхронную версию
+                results = self.memory_system.search_memories_sync(query, limit, min_similarity)
                 
                 if not results:
                     return [types.TextContent(
@@ -447,23 +511,29 @@ class MemoryTools:
                         text=f"🔍 По запросу '{query}' воспоминания не найдены"
                     )]
                 
-                # Форматирование результатов
+                # Форматирование результатов с проверкой на None
                 response = f"🔍 Найдено {len(results)} воспоминаний по запросу '{query}':\n\n"
                 
                 for i, memory in enumerate(results, 1):
-                    timestamp = datetime.datetime.fromisoformat(memory['timestamp']).strftime("%Y-%m-%d %H:%M")
-                    similarity_percent = memory['similarity'] * 100
+                    try:
+                        timestamp = datetime.datetime.fromisoformat(memory['timestamp']).strftime("%Y-%m-%d %H:%M")
+                    except:
+                        timestamp = "неизвестно"
                     
-                    response += f"**{i}. [ID: {memory['id']}]** (схожесть: {similarity_percent:.1f}%)\n"
-                    response += f"📅 {timestamp} | 🔥 Важность: {memory['importance']:.2f}\n"
-                    response += f"📝 {memory['summary']}\n"
+                    similarity_percent = (memory.get('similarity', 0) or 0) * 100
+                    importance = memory.get('importance', 0) or 0
                     
-                    if len(memory['content']) > 200:
-                        response += f"💭 {memory['content'][:200]}...\n"
+                    response += f"**{i}. [ID: {memory.get('id', 'unknown')}]** (схожесть: {similarity_percent:.1f}%)\n"
+                    response += f"📅 {timestamp} | 🔥 Важность: {importance:.2f}\n"
+                    response += f"📝 {memory.get('summary', 'Без описания')}\n"
+                    
+                    content = memory.get('content', '')
+                    if len(content) > 200:
+                        response += f"💭 {content[:200]}...\n"
                     else:
-                        response += f"💭 {memory['content']}\n"
+                        response += f"💭 {content}\n"
                     
-                    if memory.get('metadata', {}).get('tags'):
+                    if memory.get('metadata', {}) and memory['metadata'].get('tags'):
                         tags = ', '.join(memory['metadata']['tags'])
                         response += f"🏷️ Теги: {tags}\n"
                     
@@ -477,12 +547,12 @@ class MemoryTools:
                 self.logger.error(error_msg)
                 return [types.TextContent(type="text", text=error_msg)]
         
-        @mcp.RegisterTool2(name="list_memories", description="Получить список всех воспоминаний")
+        @mcp.register_tool(name="list_memories", description="Получить список всех воспоминаний")
         def list_memories(
             limit: Annotated[int, "Максимальное количество воспоминаний"] = 20
         ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
             try:
-                memories = asyncio.run(self.memory_system.get_all_memories(limit))
+                memories = self.memory_system.get_all_memories_sync(limit)
                 
                 if not memories:
                     return [types.TextContent(type="text", text="📝 Память пуста - воспоминания не найдены")]
@@ -490,13 +560,19 @@ class MemoryTools:
                 response = f"📚 Последние {len(memories)} воспоминаний:\n\n"
                 
                 for i, memory in enumerate(memories, 1):
-                    timestamp = datetime.datetime.fromisoformat(memory['timestamp']).strftime("%Y-%m-%d %H:%M")
+                    try:
+                        timestamp = datetime.datetime.fromisoformat(memory['timestamp']).strftime("%Y-%m-%d %H:%M")
+                    except:
+                        timestamp = "неизвестно"
                     
-                    response += f"**{i}. [ID: {memory['id']}]**\n"
-                    response += f"📅 {timestamp} | 🔥 Важность: {memory['importance']:.2f} | 👁️ Просмотры: {memory['access_count']}\n"
-                    response += f"📝 {memory['summary']}\n"
+                    importance = memory.get('importance', 0) or 0
+                    access_count = memory.get('access_count', 0) or 0
                     
-                    if memory.get('metadata', {}).get('tags'):
+                    response += f"**{i}. [ID: {memory.get('id', 'unknown')}]**\n"
+                    response += f"📅 {timestamp} | 🔥 Важность: {importance:.2f} | 👁️ Просмотры: {access_count}\n"
+                    response += f"📝 {memory.get('summary', 'Без описания')}\n"
+                    
+                    if memory.get('metadata', {}) and memory['metadata'].get('tags'):
                         tags = ', '.join(memory['metadata']['tags'])
                         response += f"🏷️ Теги: {tags}\n"
                     
@@ -510,12 +586,12 @@ class MemoryTools:
                 self.logger.error(error_msg)
                 return [types.TextContent(type="text", text=error_msg)]
         
-        @mcp.RegisterTool2(name="delete_memory", description="Удалить воспоминание по ID")
+        @mcp.register_tool(name="delete_memory", description="Удалить воспоминание по ID")
         def delete_memory(
             memory_id: Annotated[int, "ID воспоминания для удаления"]
         ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
             try:
-                success = asyncio.run(self.memory_system.delete_memory(memory_id))
+                success = self.memory_system.delete_memory_sync(memory_id)
                 
                 if success:
                     self.logger.info(f"Deleted memory with ID: {memory_id}")
@@ -534,13 +610,13 @@ class MemoryTools:
                 self.logger.error(error_msg)
                 return [types.TextContent(type="text", text=error_msg)]
         
-        @mcp.RegisterTool2(name="cleanup_memory", description="Очистка старых и неважных воспоминаний")
+        @mcp.register_tool(name="cleanup_memory", description="Очистка старых и неважных воспоминаний")
         def cleanup_memory(
             max_age_days: Annotated[int, "Максимальный возраст воспоминаний в днях"] = 30,
             max_count: Annotated[int, "Максимальное количество воспоминаний"] = 1000
         ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
             try:
-                deleted_count = asyncio.run(self.memory_system.cleanup_old_memories(max_age_days, max_count))
+                deleted_count = self.memory_system.cleanup_old_memories_sync(max_age_days, max_count)
                 
                 self.logger.info(f"Memory cleanup completed: {deleted_count} memories deleted")
                 return [types.TextContent(
@@ -553,7 +629,7 @@ class MemoryTools:
                 self.logger.error(error_msg)
                 return [types.TextContent(type="text", text=error_msg)]
         
-        @mcp.RegisterTool(name="memory_stats", description="Получить статистику системы памяти")
+        @mcp.register_tool(name="memory_stats", description="Получить статистику системы памяти")
         def memory_stats() -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
             try:
                 with sqlite3.connect(self.memory_system.db_path) as conn:
@@ -570,7 +646,7 @@ class MemoryTools:
                     """)
                     top_memories = cursor.fetchall()
                     
-                    # Статистика по возрасту
+                    # Статистика по возрасту с проверкой на None
                     cursor = conn.execute("""
                         SELECT 
                             COUNT(*) as count,
@@ -581,14 +657,19 @@ class MemoryTools:
                     """)
                     recent_stats = cursor.fetchone()
                 
-                has_openai = "✅" if self.memory_system.openai_client else "❌"
+                has_openai = "✅" if getattr(self.memory_system, 'openai_client', None) else "❌"
                 has_numpy = "✅" if HAS_NUMPY else "❌"
                 
                 response = "📊 **Статистика системы памяти:**\n\n"
-                response += f"🧠 Общее количество воспоминаний: **{total_memories}**\n"
+                response += f"🧠 Общее количество воспоминаний: **{total_memories or 0}**\n"
                 response += f"📈 Воспоминания за последнюю неделю: **{recent_stats[0] or 0}**\n"
-                response += f"⚡ Средняя важность (неделя): **{recent_stats[1]:.2f if recent_stats[1] else 0}**\n"
-                response += f"👁️ Среднее количество просмотров (неделя): **{recent_stats[2]:.1f if recent_stats[2] else 0}**\n\n"
+                
+                # Безопасное форматирование с проверкой на None
+                avg_importance = recent_stats[1] if recent_stats[1] is not None else 0
+                avg_access = recent_stats[2] if recent_stats[2] is not None else 0
+                
+                response += f"⚡ Средняя важность (неделя): **{avg_importance:.2f}**\n"
+                response += f"👁️ Среднее количество просмотров (неделя): **{avg_access:.1f}**\n\n"
                 
                 response += "🔧 **Состояние системы:**\n"
                 response += f"OpenAI API: {has_openai}\n"
@@ -598,6 +679,9 @@ class MemoryTools:
                 if top_memories:
                     response += "🔥 **Топ-5 важных воспоминаний:**\n"
                     for i, (content, importance, access_count) in enumerate(top_memories, 1):
+                        content = content or "Пустое содержимое"
+                        importance = importance or 0
+                        access_count = access_count or 0
                         preview = content[:60] + "..." if len(content) > 60 else content
                         response += f"{i}. {preview} (важность: {importance:.2f}, просмотры: {access_count})\n"
                 
