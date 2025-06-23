@@ -6,7 +6,7 @@ packages = ["cargo", "iana-etc", "libiconv", "libxcrypt", "openssl", "pkg-config
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["sh", "-c", " pip install -r Data/requirements.txt && python main.py --port 5000"]
+run = ["sh", "-c", "python main.py --port 5000"]
 
 [workflows]
 runButton = "Production Server"
