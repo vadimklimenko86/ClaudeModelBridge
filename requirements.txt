@@ -35,3 +35,5 @@ httpx>=0.25.0  # Для TestClient в Starlette
 # sqlalchemy>=2.0.0  # Для хранения данных в БД
 # alembic>=1.12.0  # Для миграций БД
 # sentry-sdk>=1.38.0  # Для мониторинга ошибок
+numpy==2.1.3
+openai==1.57.0

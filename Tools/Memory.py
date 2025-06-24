@@ -30,7 +30,8 @@ except ImportError:
 
 # Константы для системы памяти
 MAX_DEPTH = 5
-SIMILARITY_THRESHOLD = 0.7
+#SIMILARITY_THRESHOLD = 0.7
+SIMILARITY_THRESHOLD = 0.2
 DECAY_FACTOR = 0.99
 REINFORCEMENT_FACTOR = 1.1
 EMBEDDING_DIMENSION = 1536  # Для text-embedding-3-small
