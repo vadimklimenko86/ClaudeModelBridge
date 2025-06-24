@@ -1,0 +1,1105 @@
+{% extends "admin/layout.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">{{ page_title }}</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="saveAllSettings()">
+                <i class="fas fa-save"></i> Сохранить все
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetToDefaults()">
+                <i class="fas fa-undo"></i> Сбросить
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-info" onclick="exportSettings()">
+                <i class="fas fa-download"></i> Экспорт
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Навигация по разделам настроек -->
+<ul class="nav nav-tabs" id="settingsTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="general-tab" data-bs-toggle="tab" data-bs-target="#general" type="button" role="tab">
+            <i class="fas fa-cogs"></i> Общие
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="security-tab" data-bs-toggle="tab" data-bs-target="#security" type="button" role="tab">
+            <i class="fas fa-shield-alt"></i> Безопасность
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="logging-tab" data-bs-toggle="tab" data-bs-target="#logging" type="button" role="tab">
+            <i class="fas fa-file-alt"></i> Логирование
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="performance-tab" data-bs-toggle="tab" data-bs-target="#performance" type="button" role="tab">
+            <i class="fas fa-tachometer-alt"></i> Производительность
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="notifications-tab" data-bs-toggle="tab" data-bs-target="#notifications" type="button" role="tab">
+            <i class="fas fa-bell"></i> Уведомления
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="backup-tab" data-bs-toggle="tab" data-bs-target="#backup" type="button" role="tab">
+            <i class="fas fa-database"></i> Резервное копирование
+        </button>
+    </li>
+</ul>
+
+<!-- Содержимое вкладок -->
+<div class="tab-content" id="settingsTabContent">
+    
+    <!-- Общие настройки -->
+    <div class="tab-pane fade show active" id="general" role="tabpanel">
+        <div class="card shadow mt-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Общие настройки системы</h6>
+            </div>
+            <div class="card-body">
+                <form id="generalSettingsForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="system_name" class="form-label">Название системы</label>
+                                <input type="text" class="form-control" id="system_name" name="system_name" 
+                                       value="{{ settings.general.system_name or 'RemoteMCP Admin' }}">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="admin_email" class="form-label">Email администратора</label>
+                                <input type="email" class="form-control" id="admin_email" name="admin_email" 
+                                       value="{{ settings.general.admin_email or '' }}">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="timezone" class="form-label">Часовой пояс</label>
+                                <select class="form-select" id="timezone" name="timezone">
+                                    <option value="UTC" {% if settings.general.timezone == 'UTC' %}selected{% endif %}>UTC</option>
+                                    <option value="Europe/Moscow" {% if settings.general.timezone == 'Europe/Moscow' %}selected{% endif %}>Moscow</option>
+                                    <option value="Europe/London" {% if settings.general.timezone == 'Europe/London' %}selected{% endif %}>London</option>
+                                    <option value="America/New_York" {% if settings.general.timezone == 'America/New_York' %}selected{% endif %}>New York</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="language" class="form-label">Язык интерфейса</label>
+                                <select class="form-select" id="language" name="language">
+                                    <option value="ru" {% if settings.general.language == 'ru' %}selected{% endif %}>Русский</option>
+                                    <option value="en" {% if settings.general.language == 'en' %}selected{% endif %}>English</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="debug_mode" class="form-label">Режим отладки</label>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="debug_mode" name="debug_mode"
+                                           {% if settings.general.debug_mode %}checked{% endif %}>
+                                    <label class="form-check-label" for="debug_mode">
+                                        Включить режим отладки
+                                    </label>
+                                </div>
+                                <small class="form-text text-muted">Включает детальное логирование и отладочную информацию</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="maintenance_mode" class="form-label">Режим обслуживания</label>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="maintenance_mode" name="maintenance_mode"
+                                           {% if settings.general.maintenance_mode %}checked{% endif %}>
+                                    <label class="form-check-label" for="maintenance_mode">
+                                        Включить режим обслуживания
+                                    </label>
+                                </div>
+                                <small class="form-text text-muted">Блокирует доступ для всех пользователей кроме администраторов</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="max_concurrent_connections" class="form-label">Максимум соединений</label>
+                                <input type="number" class="form-control" id="max_concurrent_connections" 
+                                       name="max_concurrent_connections" min="1" max="1000"
+                                       value="{{ settings.general.max_concurrent_connections or 100 }}">
+                                <small class="form-text text-muted">Максимальное количество одновременных подключений</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-end">
+                        <button type="button" class="btn btn-primary" onclick="saveSettings('general')">
+                            <i class="fas fa-save"></i> Сохранить общие настройки
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Настройки безопасности -->
+    <div class="tab-pane fade" id="security" role="tabpanel">
+        <div class="card shadow mt-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Настройки безопасности</h6>
+            </div>
+            <div class="card-body">
+                <form id="securitySettingsForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="session_timeout" class="form-label">Таймаут сессии (часы)</label>
+                                <input type="number" class="form-control" id="session_timeout" 
+                                       name="session_timeout" min="1" max="24"
+                                       value="{{ settings.security.session_timeout or 8 }}">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="max_login_attempts" class="form-label">Максимум попыток входа</label>
+                                <input type="number" class="form-control" id="max_login_attempts" 
+                                       name="max_login_attempts" min="3" max="10"
+                                       value="{{ settings.security.max_login_attempts or 5 }}">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="lockout_duration" class="form-label">Блокировка (минуты)</label>
+                                <input type="number" class="form-control" id="lockout_duration" 
+                                       name="lockout_duration" min="5" max="60"
+                                       value="{{ settings.security.lockout_duration or 30 }}">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="password_min_length" class="form-label">Минимальная длина пароля</label>
+                                <input type="number" class="form-control" id="password_min_length" 
+                                       name="password_min_length" min="6" max="32"
+                                       value="{{ settings.security.password_min_length or 8 }}">
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Требования к паролю</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="require_uppercase" 
+                                           name="require_uppercase" {% if settings.security.require_uppercase %}checked{% endif %}>
+                                    <label class="form-check-label" for="require_uppercase">
+                                        Заглавные буквы
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="require_lowercase" 
+                                           name="require_lowercase" {% if settings.security.require_lowercase %}checked{% endif %}>
+                                    <label class="form-check-label" for="require_lowercase">
+                                        Строчные буквы
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="require_numbers" 
+                                           name="require_numbers" {% if settings.security.require_numbers %}checked{% endif %}>
+                                    <label class="form-check-label" for="require_numbers">
+                                        Цифры
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="require_special" 
+                                           name="require_special" {% if settings.security.require_special %}checked{% endif %}>
+                                    <label class="form-check-label" for="require_special">
+                                        Специальные символы
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Дополнительная безопасность</label>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="enable_2fa" 
+                                           name="enable_2fa" {% if settings.security.enable_2fa %}checked{% endif %}>
+                                    <label class="form-check-label" for="enable_2fa">
+                                        Двухфакторная аутентификация
+                                    </label>
+                                </div>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="log_failed_attempts" 
+                                           name="log_failed_attempts" {% if settings.security.log_failed_attempts %}checked{% endif %}>
+                                    <label class="form-check-label" for="log_failed_attempts">
+                                        Логировать неудачные попытки
+                                    </label>
+                                </div>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="ip_whitelist_enabled" 
+                                           name="ip_whitelist_enabled" {% if settings.security.ip_whitelist_enabled %}checked{% endif %}>
+                                    <label class="form-check-label" for="ip_whitelist_enabled">
+                                        Белый список IP адресов
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3" id="ip_whitelist_container" style="display: {% if settings.security.ip_whitelist_enabled %}block{% else %}none{% endif %};">
+                                <label for="ip_whitelist" class="form-label">IP адреса (по одному на строку)</label>
+                                <textarea class="form-control" id="ip_whitelist" name="ip_whitelist" rows="4">{{ settings.security.ip_whitelist or '' }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-end">
+                        <button type="button" class="btn btn-primary" onclick="saveSettings('security')">
+                            <i class="fas fa-save"></i> Сохранить настройки безопасности
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Настройки логирования -->
+    <div class="tab-pane fade" id="logging" role="tabpanel">
+        <div class="card shadow mt-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Настройки логирования</h6>
+            </div>
+            <div class="card-body">
+                <form id="loggingSettingsForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="log_level" class="form-label">Уровень логирования</label>
+                                <select class="form-select" id="log_level" name="log_level">
+                                    <option value="DEBUG" {% if settings.logging.log_level == 'DEBUG' %}selected{% endif %}>DEBUG</option>
+                                    <option value="INFO" {% if settings.logging.log_level == 'INFO' %}selected{% endif %}>INFO</option>
+                                    <option value="WARNING" {% if settings.logging.log_level == 'WARNING' %}selected{% endif %}>WARNING</option>
+                                    <option value="ERROR" {% if settings.logging.log_level == 'ERROR' %}selected{% endif %}>ERROR</option>
+                                    <option value="CRITICAL" {% if settings.logging.log_level == 'CRITICAL' %}selected{% endif %}>CRITICAL</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="log_rotation_size" class="form-label">Размер лог-файла (МБ)</label>
+                                <input type="number" class="form-control" id="log_rotation_size" 
+                                       name="log_rotation_size" min="1" max="100"
+                                       value="{{ settings.logging.log_rotation_size or 10 }}">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="log_rotation_count" class="form-label">Количество архивов</label>
+                                <input type="number" class="form-control" id="log_rotation_count" 
+                                       name="log_rotation_count" min="1" max="50"
+                                       value="{{ settings.logging.log_rotation_count or 5 }}">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="log_retention_days" class="form-label">Хранить логи (дней)</label>
+                                <input type="number" class="form-control" id="log_retention_days" 
+                                       name="log_retention_days" min="1" max="365"
+                                       value="{{ settings.logging.log_retention_days or 30 }}">
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Типы событий для логирования</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="log_api_requests" 
+                                           name="log_api_requests" {% if settings.logging.log_api_requests %}checked{% endif %}>
+                                    <label class="form-check-label" for="log_api_requests">API запросы</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="log_authentication" 
+                                           name="log_authentication" {% if settings.logging.log_authentication %}checked{% endif %}>
+                                    <label class="form-check-label" for="log_authentication">Аутентификация</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="log_errors" 
+                                           name="log_errors" {% if settings.logging.log_errors %}checked{% endif %}>
+                                    <label class="form-check-label" for="log_errors">Ошибки</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="log_performance" 
+                                           name="log_performance" {% if settings.logging.log_performance %}checked{% endif %}>
+                                    <label class="form-check-label" for="log_performance">Производительность</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="log_security_events" 
+                                           name="log_security_events" {% if settings.logging.log_security_events %}checked{% endif %}>
+                                    <label class="form-check-label" for="log_security_events">События безопасности</label>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="log_format" class="form-label">Формат логов</label>
+                                <select class="form-select" id="log_format" name="log_format">
+                                    <option value="standard" {% if settings.logging.log_format == 'standard' %}selected{% endif %}>Стандартный</option>
+                                    <option value="json" {% if settings.logging.log_format == 'json' %}selected{% endif %}>JSON</option>
+                                    <option value="detailed" {% if settings.logging.log_format == 'detailed' %}selected{% endif %}>Детальный</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Внешние системы логирования</label>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="enable_syslog" 
+                                           name="enable_syslog" {% if settings.logging.enable_syslog %}checked{% endif %}>
+                                    <label class="form-check-label" for="enable_syslog">Отправлять в syslog</label>
+                                </div>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="enable_remote_logging" 
+                                           name="enable_remote_logging" {% if settings.logging.enable_remote_logging %}checked{% endif %}>
+                                    <label class="form-check-label" for="enable_remote_logging">Удаленное логирование</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-end">
+                        <button type="button" class="btn btn-primary" onclick="saveSettings('logging')">
+                            <i class="fas fa-save"></i> Сохранить настройки логирования
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Настройки производительности -->
+    <div class="tab-pane fade" id="performance" role="tabpanel">
+        <div class="card shadow mt-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Настройки производительности</h6>
+            </div>
+            <div class="card-body">
+                <form id="performanceSettingsForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="worker_processes" class="form-label">Количество worker процессов</label>
+                                <input type="number" class="form-control" id="worker_processes" 
+                                       name="worker_processes" min="1" max="16"
+                                       value="{{ settings.performance.worker_processes or 4 }}">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="request_timeout" class="form-label">Таймаут запроса (сек)</label>
+                                <input type="number" class="form-control" id="request_timeout" 
+                                       name="request_timeout" min="5" max="300"
+                                       value="{{ settings.performance.request_timeout or 30 }}">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="max_request_size" class="form-label">Макс. размер запроса (МБ)</label>
+                                <input type="number" class="form-control" id="max_request_size" 
+                                       name="max_request_size" min="1" max="100"
+                                       value="{{ settings.performance.max_request_size or 16 }}">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="rate_limit_requests" class="form-label">Лимит запросов в минуту</label>
+                                <input type="number" class="form-control" id="rate_limit_requests" 
+                                       name="rate_limit_requests" min="10" max="1000"
+                                       value="{{ settings.performance.rate_limit_requests or 100 }}">
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Кэширование</label>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="enable_caching" 
+                                           name="enable_caching" {% if settings.performance.enable_caching %}checked{% endif %}>
+                                    <label class="form-check-label" for="enable_caching">Включить кэширование</label>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3" id="cache_settings" style="display: {% if settings.performance.enable_caching %}block{% else %}none{% endif %};">
+                                <label for="cache_ttl" class="form-label">TTL кэша (секунды)</label>
+                                <input type="number" class="form-control" id="cache_ttl" 
+                                       name="cache_ttl" min="60" max="3600"
+                                       value="{{ settings.performance.cache_ttl or 300 }}">
+                                
+                                <label for="cache_max_size" class="form-label mt-2">Макс. размер кэша (МБ)</label>
+                                <input type="number" class="form-control" id="cache_max_size" 
+                                       name="cache_max_size" min="10" max="1000"
+                                       value="{{ settings.performance.cache_max_size or 100 }}">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Оптимизации</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="enable_compression" 
+                                           name="enable_compression" {% if settings.performance.enable_compression %}checked{% endif %}>
+                                    <label class="form-check-label" for="enable_compression">Сжатие ответов</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="enable_connection_pooling" 
+                                           name="enable_connection_pooling" {% if settings.performance.enable_connection_pooling %}checked{% endif %}>
+                                    <label class="form-check-label" for="enable_connection_pooling">Пул соединений</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="enable_async_processing" 
+                                           name="enable_async_processing" {% if settings.performance.enable_async_processing %}checked{% endif %}>
+                                    <label class="form-check-label" for="enable_async_processing">Асинхронная обработка</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-end">
+                        <button type="button" class="btn btn-primary" onclick="saveSettings('performance')">
+                            <i class="fas fa-save"></i> Сохранить настройки производительности
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Настройки уведомлений -->
+    <div class="tab-pane fade" id="notifications" role="tabpanel">
+        <div class="card shadow mt-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Настройки уведомлений</h6>
+            </div>
+            <div class="card-body">
+                <form id="notificationsSettingsForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Email уведомления</label>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="email_enabled" 
+                                           name="email_enabled" {% if settings.notifications.email_enabled %}checked{% endif %}>
+                                    <label class="form-check-label" for="email_enabled">Включить email уведомления</label>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3" id="email_settings" style="display: {% if settings.notifications.email_enabled %}block{% else %}none{% endif %};">
+                                <label for="smtp_server" class="form-label">SMTP сервер</label>
+                                <input type="text" class="form-control" id="smtp_server" name="smtp_server" 
+                                       value="{{ settings.notifications.smtp_server or '' }}">
+                                
+                                <label for="smtp_port" class="form-label mt-2">SMTP порт</label>
+                                <input type="number" class="form-control" id="smtp_port" name="smtp_port" 
+                                       value="{{ settings.notifications.smtp_port or 587 }}">
+                                
+                                <label for="smtp_username" class="form-label mt-2">SMTP пользователь</label>
+                                <input type="text" class="form-control" id="smtp_username" name="smtp_username" 
+                                       value="{{ settings.notifications.smtp_username or '' }}">
+                                
+                                <label for="smtp_password" class="form-label mt-2">SMTP пароль</label>
+                                <input type="password" class="form-control" id="smtp_password" name="smtp_password" 
+                                       value="{{ settings.notifications.smtp_password or '' }}">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Типы уведомлений</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="notify_errors" 
+                                           name="notify_errors" {% if settings.notifications.notify_errors %}checked{% endif %}>
+                                    <label class="form-check-label" for="notify_errors">Критические ошибки</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="notify_security" 
+                                           name="notify_security" {% if settings.notifications.notify_security %}checked{% endif %}>
+                                    <label class="form-check-label" for="notify_security">События безопасности</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="notify_performance" 
+                                           name="notify_performance" {% if settings.notifications.notify_performance %}checked{% endif %}>
+                                    <label class="form-check-label" for="notify_performance">Проблемы производительности</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="notify_system_health" 
+                                           name="notify_system_health" {% if settings.notifications.notify_system_health %}checked{% endif %}>
+                                    <label class="form-check-label" for="notify_system_health">Состояние системы</label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Telegram уведомления</label>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="telegram_enabled" 
+                                           name="telegram_enabled" {% if settings.notifications.telegram_enabled %}checked{% endif %}>
+                                    <label class="form-check-label" for="telegram_enabled">Включить Telegram</label>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3" id="telegram_settings" style="display: {% if settings.notifications.telegram_enabled %}block{% else %}none{% endif %};">
+                                <label for="telegram_token" class="form-label">Bot Token</label>
+                                <input type="text" class="form-control" id="telegram_token" name="telegram_token" 
+                                       value="{{ settings.notifications.telegram_token or '' }}">
+                                
+                                <label for="telegram_chat_id" class="form-label mt-2">Chat ID</label>
+                                <input type="text" class="form-control" id="telegram_chat_id" name="telegram_chat_id" 
+                                       value="{{ settings.notifications.telegram_chat_id or '' }}">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="notification_frequency" class="form-label">Частота уведомлений</label>
+                                <select class="form-select" id="notification_frequency" name="notification_frequency">
+                                    <option value="immediate" {% if settings.notifications.notification_frequency == 'immediate' %}selected{% endif %}>Немедленно</option>
+                                    <option value="hourly" {% if settings.notifications.notification_frequency == 'hourly' %}selected{% endif %}>Каждый час</option>
+                                    <option value="daily" {% if settings.notifications.notification_frequency == 'daily' %}selected{% endif %}>Ежедневно</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <button type="button" class="btn btn-outline-primary" onclick="testNotifications()">
+                                    <i class="fas fa-paper-plane"></i> Тестовое уведомление
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-end">
+                        <button type="button" class="btn btn-primary" onclick="saveSettings('notifications')">
+                            <i class="fas fa-save"></i> Сохранить настройки уведомлений
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Настройки резервного копирования -->
+    <div class="tab-pane fade" id="backup" role="tabpanel">
+        <div class="card shadow mt-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Резервное копирование и восстановление</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Создание резервной копии</h6>
+                        <form id="backupForm">
+                            <div class="mb-3">
+                                <label class="form-label">Что включить в резервную копию</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="backup_database" 
+                                           name="backup_database" checked>
+                                    <label class="form-check-label" for="backup_database">База данных</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="backup_config" 
+                                           name="backup_config" checked>
+                                    <label class="form-check-label" for="backup_config">Конфигурация</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="backup_logs" 
+                                           name="backup_logs">
+                                    <label class="form-check-label" for="backup_logs">Логи</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="backup_uploads" 
+                                           name="backup_uploads" checked>
+                                    <label class="form-check-label" for="backup_uploads">Загруженные файлы</label>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <button type="button" class="btn btn-success" onclick="createBackup()">
+                                    <i class="fas fa-download"></i> Создать резервную копию
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <hr>
+                        
+                        <h6>Автоматическое резервное копирование</h6>
+                        <form id="autoBackupForm">
+                            <div class="mb-3">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="auto_backup_enabled" 
+                                           name="auto_backup_enabled" {% if settings.backup.auto_backup_enabled %}checked{% endif %}>
+                                    <label class="form-check-label" for="auto_backup_enabled">Включить автоматическое создание</label>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3" id="auto_backup_settings" style="display: {% if settings.backup.auto_backup_enabled %}block{% else %}none{% endif %};">
+                                <label for="backup_schedule" class="form-label">Расписание</label>
+                                <select class="form-select" id="backup_schedule" name="backup_schedule">
+                                    <option value="daily" {% if settings.backup.backup_schedule == 'daily' %}selected{% endif %}>Ежедневно</option>
+                                    <option value="weekly" {% if settings.backup.backup_schedule == 'weekly' %}selected{% endif %}>Еженедельно</option>
+                                    <option value="monthly" {% if settings.backup.backup_schedule == 'monthly' %}selected{% endif %}>Ежемесячно</option>
+                                </select>
+                                
+                                <label for="backup_retention" class="form-label mt-2">Хранить копий</label>
+                                <input type="number" class="form-control" id="backup_retention" 
+                                       name="backup_retention" min="1" max="30"
+                                       value="{{ settings.backup.backup_retention or 7 }}">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <button type="button" class="btn btn-primary" onclick="saveSettings('backup')">
+                                    <i class="fas fa-save"></i> Сохранить настройки
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <h6>Восстановление</h6>
+                        <form id="restoreForm">
+                            <div class="mb-3">
+                                <label for="backup_file" class="form-label">Выберите файл резервной копии</label>
+                                <input type="file" class="form-control" id="backup_file" name="backup_file" accept=".zip,.tar.gz">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <button type="button" class="btn btn-warning" onclick="restoreBackup()">
+                                    <i class="fas fa-upload"></i> Восстановить из файла
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <hr>
+                        
+                        <h6>Существующие резервные копии</h6>
+                        <div id="backupsList">
+                            <div class="text-center">
+                                <div class="spinner-border" role="status">
+                                    <span class="visually-hidden">Загрузка...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Сохранение настроек
+async function saveSettings(section) {
+    const form = document.getElementById(`${section}SettingsForm`);
+    const formData = new FormData(form);
+    
+    try {
+        const response = await fetch(`/admin/api/settings/${section}`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showAlert('Настройки успешно сохранены', 'success');
+        } else {
+            showAlert(result.error || 'Ошибка сохранения настроек', 'danger');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showAlert('Произошла ошибка при сохранении', 'danger');
+    }
+}
+
+// Сохранение всех настроек
+async function saveAllSettings() {
+    const sections = ['general', 'security', 'logging', 'performance', 'notifications', 'backup'];
+    let successCount = 0;
+    
+    for (const section of sections) {
+        try {
+            const form = document.getElementById(`${section}SettingsForm`);
+            if (form) {
+                const formData = new FormData(form);
+                const response = await fetch(`/admin/api/settings/${section}`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': getCSRFToken()
+                    },
+                    body: formData
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    successCount++;
+                }
+            }
+        } catch (error) {
+            console.error(`Ошибка сохранения ${section}:`, error);
+        }
+    }
+    
+    if (successCount === sections.length) {
+        showAlert('Все настройки успешно сохранены', 'success');
+    } else {
+        showAlert(`Сохранено ${successCount} из ${sections.length} разделов`, 'warning');
+    }
+}
+
+// Сброс к настройкам по умолчанию
+async function resetToDefaults() {
+    if (!confirm('Сбросить все настройки к значениям по умолчанию? Это действие нельзя отменить.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/admin/api/settings/reset', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showAlert('Настройки сброшены к значениям по умолчанию', 'success');
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showAlert(result.error || 'Ошибка сброса настроек', 'danger');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showAlert('Произошла ошибка при сбросе настроек', 'danger');
+    }
+}
+
+// Экспорт настроек
+async function exportSettings() {
+    try {
+        const response = await fetch('/admin/api/settings/export', {
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+        
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `settings_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            showAlert('Настройки экспортированы', 'success');
+        } else {
+            const result = await response.json();
+            showAlert(result.error || 'Ошибка экспорта', 'danger');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showAlert('Произошла ошибка при экспорте', 'danger');
+    }
+}
+
+// Тестирование уведомлений
+async function testNotifications() {
+    try {
+        const response = await fetch('/admin/api/notifications/test', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showAlert('Тестовое уведомление отправлено', 'success');
+        } else {
+            showAlert(result.error || 'Ошибка отправки уведомления', 'danger');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showAlert('Произошла ошибка при отправке', 'danger');
+    }
+}
+
+// Создание резервной копии
+async function createBackup() {
+    const form = document.getElementById('backupForm');
+    const formData = new FormData(form);
+    
+    try {
+        showSpinner();
+        
+        const response = await fetch('/admin/api/backup/create', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: formData
+        });
+        
+        hideSpinner();
+        
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `backup_${new Date().toISOString().split('T')[0]}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            showAlert('Резервная копия создана и загружена', 'success');
+            loadBackupsList();
+        } else {
+            const result = await response.json();
+            showAlert(result.error || 'Ошибка создания резервной копии', 'danger');
+        }
+    } catch (error) {
+        hideSpinner();
+        console.error('Ошибка:', error);
+        showAlert('Произошла ошибка при создании резервной копии', 'danger');
+    }
+}
+
+// Восстановление из резервной копии
+async function restoreBackup() {
+    const fileInput = document.getElementById('backup_file');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        showAlert('Выберите файл резервной копии', 'warning');
+        return;
+    }
+    
+    if (!confirm('Восстановить систему из резервной копии? Текущие данные будут перезаписаны.')) {
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('backup_file', file);
+    
+    try {
+        showSpinner();
+        
+        const response = await fetch('/admin/api/backup/restore', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: formData
+        });
+        
+        hideSpinner();
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showAlert('Система успешно восстановлена из резервной копии', 'success');
+            setTimeout(() => location.reload(), 3000);
+        } else {
+            showAlert(result.error || 'Ошибка восстановления', 'danger');
+        }
+    } catch (error) {
+        hideSpinner();
+        console.error('Ошибка:', error);
+        showAlert('Произошла ошибка при восстановлении', 'danger');
+    }
+}
+
+// Загрузка списка резервных копий
+async function loadBackupsList() {
+    try {
+        const response = await fetch('/admin/api/backup/list');
+        const result = await response.json();
+        
+        const container = document.getElementById('backupsList');
+        
+        if (result.success && result.backups.length > 0) {
+            const html = result.backups.map(backup => `
+                <div class="backup-item d-flex justify-content-between align-items-center p-2 border-bottom">
+                    <div>
+                        <strong>${backup.name}</strong>
+                        <br>
+                        <small class="text-muted">
+                            ${formatDateTime(backup.created_at)} | ${formatFileSize(backup.size)}
+                        </small>
+                    </div>
+                    <div>
+                        <button class="btn btn-sm btn-outline-primary me-1" onclick="downloadBackup('${backup.id}')">
+                            <i class="fas fa-download"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteBackup('${backup.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = '<p class="text-muted">Нет сохраненных резервных копий</p>';
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки списка копий:', error);
+        document.getElementById('backupsList').innerHTML = '<p class="text-danger">Ошибка загрузки</p>';
+    }
+}
+
+// Скачивание резервной копии
+async function downloadBackup(backupId) {
+    try {
+        const response = await fetch(`/admin/api/backup/download/${backupId}`, {
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+        
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `backup_${backupId}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } else {
+            showAlert('Ошибка скачивания резервной копии', 'danger');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showAlert('Произошла ошибка при скачивании', 'danger');
+    }
+}
+
+// Удаление резервной копии
+async function deleteBackup(backupId) {
+    if (!confirm('Удалить резервную копию?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/admin/api/backup/delete/${backupId}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showAlert('Резервная копия удалена', 'success');
+            loadBackupsList();
+        } else {
+            showAlert(result.error || 'Ошибка удаления', 'danger');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showAlert('Произошла ошибка при удалении', 'danger');
+    }
+}
+
+// Инициализация при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    // Загружаем список резервных копий
+    loadBackupsList();
+    
+    // Обработчики для переключателей
+    document.getElementById('ip_whitelist_enabled').addEventListener('change', function() {
+        const container = document.getElementById('ip_whitelist_container');
+        container.style.display = this.checked ? 'block' : 'none';
+    });
+    
+    document.getElementById('enable_caching').addEventListener('change', function() {
+        const container = document.getElementById('cache_settings');
+        container.style.display = this.checked ? 'block' : 'none';
+    });
+    
+    document.getElementById('email_enabled').addEventListener('change', function() {
+        const container = document.getElementById('email_settings');
+        container.style.display = this.checked ? 'block' : 'none';
+    });
+    
+    document.getElementById('telegram_enabled').addEventListener('change', function() {
+        const container = document.getElementById('telegram_settings');
+        container.style.display = this.checked ? 'block' : 'none';
+    });
+    
+    document.getElementById('auto_backup_enabled').addEventListener('change', function() {
+        const container = document.getElementById('auto_backup_settings');
+        container.style.display = this.checked ? 'block' : 'none';
+    });
+});
+</script>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.backup-item {
+    transition: background-color 0.2s;
+}
+
+.backup-item:hover {
+    background-color: #f8f9fa;
+}
+
+.nav-tabs .nav-link {
+    color: #6c757d;
+}
+
+.nav-tabs .nav-link.active {
+    color: #007bff;
+    border-color: #007bff #dee2e6 #fff;
+}
+
+.tab-pane {
+    min-height: 400px;
+}
+
+.form-check-input:checked {
+    background-color: #007bff;
+    border-color: #007bff;
+}
+
+.form-switch .form-check-input {
+    width: 2em;
+    margin-left: -2.5em;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='rgba%280,0,0,.25%29'/%3e%3c/svg%3e");
+    background-position: left center;
+    background-repeat: no-repeat;
+    background-size: contain !important;
+    border-radius: 2em;
+}
+
+.form-switch .form-check-input:checked {
+    background-position: right center;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23fff'/%3e%3c/svg%3e");
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.border-left-primary {
+    border-left: 0.25rem solid #4e73df !important;
+}
+
+.border-left-success {
+    border-left: 0.25rem solid #1cc88a !important;
+}
+
+.border-left-info {
+    border-left: 0.25rem solid #36b9cc !important;
+}
+
+.border-left-warning {
+    border-left: 0.25rem solid #f6c23e !important;
+}
+</style>
+{% endblock %}

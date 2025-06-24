@@ -1,0 +1,472 @@
+{% extends "admin/layout.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">{{ page_title }}</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshUsers()">
+                <i class="fas fa-sync-alt"></i> Обновить
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Статистика пользователей -->
+<div class="row mb-4">
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-primary shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Активные сессии</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ active_sessions|length }}</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-users fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-success shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Всего запросов</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ user_stats.total_requests or 0 }}</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-chart-line fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-info shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Успешных</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ user_stats.successful_requests or 0 }}</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-warning shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Ошибок</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ user_stats.failed_requests or 0 }}</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-exclamation-triangle fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Активные сессии -->
+<div class="card shadow mb-4">
+    <div class="card-header py-3">
+        <h6 class="m-0 font-weight-bold text-primary">Активные сессии</h6>
+    </div>
+    <div class="card-body">
+        {% if active_sessions %}
+        <div class="table-responsive">
+            <table class="table table-bordered" id="sessionsTable" width="100%" cellspacing="0">
+                <thead>
+                    <tr>
+                        <th>Пользователь</th>
+                        <th>IP адрес</th>
+                        <th>Время входа</th>
+                        <th>Последняя активность</th>
+                        <th>User Agent</th>
+                        <th>Статус</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for session in active_sessions %}
+                    <tr>
+                        <td>
+                            <strong>{{ session.username }}</strong>
+                            <br>
+                            <small class="text-muted">ID: {{ session.token[:8] }}...</small>
+                        </td>
+                        <td>
+                            <code>{{ session.ip_address }}</code>
+                            <br>
+                            <small class="text-muted">{{ session.location or 'Неизвестно' }}</small>
+                        </td>
+                        <td>
+                            <span class="text-nowrap">{{ session.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+                        </td>
+                        <td>
+                            <span class="text-nowrap">{{ session.last_activity.strftime('%d.%m.%Y %H:%M') }}</span>
+                            <br>
+                            <small class="text-muted">
+                                {% set diff = (session.last_activity - session.created_at).total_seconds() %}
+                                {% if diff < 3600 %}
+                                    {{ (diff / 60)|int }} мин
+                                {% else %}
+                                    {{ (diff / 3600)|int }}ч {{ ((diff % 3600) / 60)|int }}м
+                                {% endif %}
+                            </small>
+                        </td>
+                        <td>
+                            <small>{{ session.user_agent[:50] }}{% if session.user_agent|length > 50 %}...{% endif %}</small>
+                        </td>
+                        <td>
+                            {% if session.is_active %}
+                                <span class="badge badge-success">Активна</span>
+                            {% else %}
+                                <span class="badge badge-secondary">Неактивна</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-danger" onclick="terminateSession('{{ session.token }}')" 
+                                    title="Завершить сессию">
+                                <i class="fas fa-times"></i>
+                            </button>
+                            <button class="btn btn-sm btn-info" onclick="showSessionDetails('{{ session.token }}')" 
+                                    title="Подробности">
+                                <i class="fas fa-info-circle"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+            <i class="fas fa-users fa-3x text-gray-400 mb-3"></i>
+            <p class="text-muted">Нет активных сессий</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- История активности -->
+<div class="card shadow mb-4">
+    <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+        <h6 class="m-0 font-weight-bold text-primary">История активности</h6>
+        <div class="dropdown no-arrow">
+            <a class="dropdown-toggle" href="#" role="button" id="dropdownMenuLink" data-bs-toggle="dropdown">
+                <i class="fas fa-ellipsis-v fa-sm fa-fw text-gray-400"></i>
+            </a>
+            <div class="dropdown-menu dropdown-menu-right shadow animated--fade-in">
+                <div class="dropdown-header">Действия:</div>
+                <a class="dropdown-item" href="#" onclick="exportUserActivity()">
+                    <i class="fas fa-download fa-sm fa-fw mr-2 text-gray-400"></i>
+                    Экспорт в CSV
+                </a>
+                <div class="dropdown-divider"></div>
+                <a class="dropdown-item" href="#" onclick="clearOldActivity()">
+                    <i class="fas fa-trash fa-sm fa-fw mr-2 text-gray-400"></i>
+                    Очистить старые записи
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="chart-area">
+            <canvas id="userActivityChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно деталей сессии -->
+<div class="modal fade" id="sessionDetailsModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Детали сессии</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="sessionDetailsContent">
+                <!-- Содержимое загружается через AJAX -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button type="button" class="btn btn-danger" id="terminateSessionBtn">Завершить сессию</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Обновление списка пользователей
+function refreshUsers() {
+    showSpinner();
+    location.reload();
+}
+
+// Завершение сессии
+async function terminateSession(token) {
+    if (!confirm('Вы уверены, что хотите завершить эту сессию?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/admin/api/sessions/terminate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify({ token: token })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showAlert('Сессия успешно завершена', 'success');
+            refreshUsers();
+        } else {
+            showAlert(result.error || 'Ошибка завершения сессии', 'danger');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showAlert('Произошла ошибка при завершении сессии', 'danger');
+    }
+}
+
+// Показ деталей сессии
+async function showSessionDetails(token) {
+    try {
+        const response = await fetch(`/admin/api/sessions/${token}/details`);
+        const result = await response.json();
+        
+        if (result.success) {
+            document.getElementById('sessionDetailsContent').innerHTML = generateSessionDetailsHTML(result.data);
+            document.getElementById('terminateSessionBtn').onclick = () => terminateSession(token);
+            new bootstrap.Modal(document.getElementById('sessionDetailsModal')).show();
+        } else {
+            showAlert(result.error || 'Ошибка загрузки деталей сессии', 'danger');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showAlert('Произошла ошибка при загрузке деталей', 'danger');
+    }
+}
+
+// Генерация HTML для деталей сессии
+function generateSessionDetailsHTML(session) {
+    return `
+        <div class="row">
+            <div class="col-md-6">
+                <h6>Основная информация</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Пользователь:</strong></td><td>${session.username}</td></tr>
+                    <tr><td><strong>IP адрес:</strong></td><td><code>${session.ip_address}</code></td></tr>
+                    <tr><td><strong>Создана:</strong></td><td>${formatDateTime(session.created_at)}</td></tr>
+                    <tr><td><strong>Последняя активность:</strong></td><td>${formatDateTime(session.last_activity)}</td></tr>
+                    <tr><td><strong>Статус:</strong></td><td>${session.is_active ? '<span class="badge badge-success">Активна</span>' : '<span class="badge badge-secondary">Неактивна</span>'}</td></tr>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <h6>Техническая информация</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Token ID:</strong></td><td><code>${session.token}</code></td></tr>
+                    <tr><td><strong>User Agent:</strong></td><td><small>${session.user_agent}</small></td></tr>
+                    <tr><td><strong>Локация:</strong></td><td>${session.location || 'Неизвестно'}</td></tr>
+                    <tr><td><strong>Запросов:</strong></td><td>${session.requests_count || 0}</td></tr>
+                </table>
+            </div>
+        </div>
+        
+        <div class="mt-3">
+            <h6>История активности</h6>
+            <div class="activity-timeline">
+                ${session.activity_log ? session.activity_log.map(log => `
+                    <div class="activity-item">
+                        <small class="text-muted">${formatDateTime(log.timestamp)}</small>
+                        <span class="activity-action">${log.action}</span>
+                    </div>
+                `).join('') : '<p class="text-muted">Нет данных об активности</p>'}
+            </div>
+        </div>
+    `;
+}
+
+// Экспорт активности пользователей
+async function exportUserActivity() {
+    try {
+        const response = await fetch('/admin/api/users/export-activity', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+        
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `user_activity_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            showAlert('Экспорт завершен', 'success');
+        } else {
+            const result = await response.json();
+            showAlert(result.error || 'Ошибка экспорта', 'danger');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showAlert('Произошла ошибка при экспорте', 'danger');
+    }
+}
+
+// Очистка старых записей активности
+async function clearOldActivity() {
+    if (!confirm('Удалить записи активности старше 30 дней?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/admin/api/users/clear-old-activity', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify({ days: 30 })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showAlert(`Удалено записей: ${result.deleted_count}`, 'success');
+            refreshUsers();
+        } else {
+            showAlert(result.error || 'Ошибка очистки', 'danger');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showAlert('Произошла ошибка при очистке', 'danger');
+    }
+}
+
+// Инициализация графика активности пользователей
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof Chart !== 'undefined') {
+        initUserActivityChart();
+    }
+});
+
+function initUserActivityChart() {
+    const ctx = document.getElementById('userActivityChart').getContext('2d');
+    
+    // Получаем данные через AJAX
+    fetch('/admin/api/users/activity-chart-data')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.labels,
+                        datasets: [{
+                            label: 'Активные сессии',
+                            data: data.sessions,
+                            borderColor: 'rgb(75, 192, 192)',
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            tension: 0.1
+                        }, {
+                            label: 'Запросы',
+                            data: data.requests,
+                            borderColor: 'rgb(255, 99, 132)',
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            }
+        })
+        .catch(error => console.error('Ошибка загрузки данных графика:', error));
+}
+
+// Инициализация DataTable для сессий
+$(document).ready(function() {
+    if ($.fn.DataTable) {
+        $('#sessionsTable').DataTable({
+            order: [[2, 'desc']], // Сортировка по времени входа
+            pageLength: 25,
+            language: {
+                url: '/static/admin/js/dataTables.russian.json'
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.activity-timeline {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.activity-item {
+    padding: 5px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-action {
+    margin-left: 10px;
+}
+
+.border-left-primary {
+    border-left: 0.25rem solid #4e73df !important;
+}
+
+.border-left-success {
+    border-left: 0.25rem solid #1cc88a !important;
+}
+
+.border-left-info {
+    border-left: 0.25rem solid #36b9cc !important;
+}
+
+.border-left-warning {
+    border-left: 0.25rem solid #f6c23e !important;
+}
+</style>
+{% endblock %}

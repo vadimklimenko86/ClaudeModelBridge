@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Вход в админ-панель - RemoteMCP</title>
+    
+    <!-- CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .login-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+            width: 100%;
+            max-width: 400px;
+            animation: fadeInUp 0.8s ease;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .login-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+        
+        .login-header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+        
+        .login-header p {
+            margin: 0.5rem 0 0;
+            opacity: 0.9;
+            font-size: 0.9rem;
+        }
+        
+        .login-body {
+            padding: 2rem;
+        }
+        
+        .form-control {
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+        
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        
+        .input-group {
+            position: relative;
+        }
+        
+        .input-group .form-control {
+            padding-left: 50px;
+        }
+        
+        .input-group-text {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            z-index: 10;
+            color: #6c757d;
+        }
+        
+        .btn-login {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 12px;
+            padding: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: white;
+            width: 100%;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+            color: white;
+        }
+        
+        .btn-login:disabled {
+            opacity: 0.7;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .alert {
+            border: none;
+            border-radius: 12px;
+            padding: 1rem;
+        }
+        
+        .alert-danger {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+            color: white;
+        }
+        
+        .login-footer {
+            padding: 1.5rem 2rem;
+            background: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+            text-align: center;
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+        
+        .password-toggle {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: #6c757d;
+            cursor: pointer;
+            z-index: 10;
+        }
+        
+        .loading-spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid transparent;
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .security-info {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: #1565c0;
+        }
+        
+        @media (max-width: 576px) {
+            .login-container {
+                margin: 1rem;
+                border-radius: 15px;
+            }
+            
+            .login-header {
+                padding: 1.5rem;
+            }
+            
+            .login-body {
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <!-- Заголовок -->
+        <div class="login-header">
+            <div class="mb-3">
+                <i class="fas fa-shield-alt" style="font-size: 3rem; opacity: 0.9;"></i>
+            </div>
+            <h1>Вход в систему</h1>
+            <p>Админ-панель RemoteMCP</p>
+        </div>
+        
+        <!-- Форма входа -->
+        <div class="login-body">
+            {% if error %}
+            <div class="alert alert-danger" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>{{ error }}
+            </div>
+            {% endif %}
+            
+            <form method="post" action="/admin/login" id="loginForm">
+                <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+                
+                <div class="mb-3">
+                    <label for="username" class="form-label">Имя пользователя</label>
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class="fas fa-user"></i>
+                        </span>
+                        <input type="text" 
+                               class="form-control" 
+                               id="username" 
+                               name="username" 
+                               value="{{ username or '' }}"
+                               placeholder="Введите имя пользователя"
+                               required 
+                               autocomplete="username"
+                               autofocus>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="password" class="form-label">Пароль</label>
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class="fas fa-lock"></i>
+                        </span>
+                        <input type="password" 
+                               class="form-control" 
+                               id="password" 
+                               name="password" 
+                               placeholder="Введите пароль"
+                               required 
+                               autocomplete="current-password">
+                        <button type="button" class="password-toggle" onclick="togglePassword()">
+                            <i class="fas fa-eye" id="passwordToggleIcon"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-login" id="loginButton">
+                    <span class="login-text">
+                        <i class="fas fa-sign-in-alt me-2"></i>Войти
+                    </span>
+                    <div class="loading-spinner"></div>
+                </button>
+                
+                <div class="security-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Защита от взлома:</strong> После 5 неудачных попыток аккаунт будет заблокирован на 30 минут.
+                </div>
+            </form>
+        </div>
+        
+        <!-- Подвал -->
+        <div class="login-footer">
+            <div class="d-flex justify-content-between align-items-center">
+                <span>RemoteMCP Admin Panel</span>
+                <span class="text-muted">
+                    <i class="fas fa-clock me-1"></i>
+                    <span id="current-time"></span>
+                </span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- JavaScript -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Обновление времени
+        function updateTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('ru-RU', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            document.getElementById('current-time').textContent = timeString;
+        }
+        
+        setInterval(updateTime, 1000);
+        updateTime();
+        
+        // Переключение видимости пароля
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            const toggleIcon = document.getElementById('passwordToggleIcon');
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                toggleIcon.className = 'fas fa-eye-slash';
+            } else {
+                passwordInput.type = 'password';
+                toggleIcon.className = 'fas fa-eye';
+            }
+        }
+        
+        // Обработка формы входа
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            const loginButton = document.getElementById('loginButton');
+            const loginText = loginButton.querySelector('.login-text');
+            const loadingSpinner = loginButton.querySelector('.loading-spinner');
+            
+            // Показываем индикатор загрузки
+            loginButton.disabled = true;
+            loginText.style.display = 'none';
+            loadingSpinner.style.display = 'inline-block';
+            
+            // Через 10 секунд возвращаем кнопку в исходное состояние
+            setTimeout(() => {
+                loginButton.disabled = false;
+                loginText.style.display = 'inline';
+                loadingSpinner.style.display = 'none';
+            }, 10000);
+        });
+        
+        // Автофокус на поле пароля если имя пользователя уже заполнено
+        document.addEventListener('DOMContentLoaded', function() {
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
+            
+            if (usernameInput.value) {
+                passwordInput.focus();
+            }
+        });
+        
+        // Обработка Enter в полях
+        document.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                const activeElement = document.activeElement;
+                
+                if (activeElement.id === 'username') {
+                    document.getElementById('password').focus();
+                } else if (activeElement.id === 'password') {
+                    document.getElementById('loginForm').submit();
+                }
+            }
+        });
+        
+        // Удаление алертов через 10 секунд
+        document.addEventListener('DOMContentLoaded', function() {
+            const alerts = document.querySelectorAll('.alert');
+            alerts.forEach(alert => {
+                setTimeout(() => {
+                    alert.style.opacity = '0';
+                    alert.style.transform = 'translateY(-20px)';
+                    setTimeout(() => alert.remove(), 300);
+                }, 10000);
+            });
+        });
+    </script>
+</body>
+</html>

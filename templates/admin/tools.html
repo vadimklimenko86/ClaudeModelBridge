@@ -1,0 +1,716 @@
+{% extends "admin/layout.html" %}
+
+{% block title %}{{ page_title }} - Админ-панель RemoteMCP{% endblock %}
+{% block page_title %}{{ page_title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .tool-card {
+        transition: all 0.3s ease;
+        cursor: pointer;
+        position: relative;
+        border: 2px solid transparent;
+    }
+    
+    .tool-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        border-color: var(--primary-color);
+    }
+    
+    .tool-card.active {
+        border-color: #28a745;
+        background: rgba(40, 167, 69, 0.05);
+    }
+    
+    .tool-card.inactive {
+        border-color: #dc3545;
+        background: rgba(220, 53, 69, 0.05);
+    }
+    
+    .tool-status {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+    }
+    
+    .tool-status.active {
+        background: #28a745;
+        box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.25);
+    }
+    
+    .tool-status.inactive {
+        background: #dc3545;
+        box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.25);
+    }
+    
+    .tool-icon {
+        width: 50px;
+        height: 50px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: white;
+        margin-bottom: 1rem;
+    }
+    
+    .tool-icon.system {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    .tool-icon.filesystem {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    }
+    
+    .tool-icon.memory {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+    
+    .tool-icon.oauth {
+        background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    }
+    
+    .tool-icon.default {
+        background: linear-gradient(135deg, #ffa726 0%, #ffcc02 100%);
+    }
+    
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+    
+    .stat-item {
+        text-align: center;
+        padding: 0.75rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+    
+    .stat-value {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--primary-color);
+    }
+    
+    .stat-label {
+        font-size: 0.8rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .filter-bar {
+        background: white;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    
+    .search-box {
+        position: relative;
+    }
+    
+    .search-box .fas {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+    }
+    
+    .search-box input {
+        padding-left: 40px;
+    }
+    
+    .usage-chart {
+        height: 60px;
+        margin-top: 0.5rem;
+    }
+    
+    .tool-details {
+        display: none;
+        margin-top: 1rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border-left: 4px solid var(--primary-color);
+    }
+    
+    .tool-card.expanded .tool-details {
+        display: block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- Фильтры и поиск -->
+    <div class="filter-bar">
+        <div class="row align-items-center">
+            <div class="col-md-4">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" class="form-control" id="toolSearch" placeholder="Поиск инструментов...">
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" id="statusFilter">
+                    <option value="">Все статусы</option>
+                    <option value="active">Активные</option>
+                    <option value="inactive">Неактивные</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" id="categoryFilter">
+                    <option value="">Все категории</option>
+                    <option value="system">Системные</option>
+                    <option value="filesystem">Файловая система</option>
+                    <option value="memory">Память</option>
+                    <option value="oauth">Аутентификация</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-primary w-100" onclick="refreshTools()">
+                    <i class="fas fa-sync-alt me-2"></i>
+                    Обновить
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Общая статистика -->
+    <div class="row mb-4">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <div class="metric-icon primary mx-auto mb-2">
+                        <i class="fas fa-tools"></i>
+                    </div>
+                    <h3 class="mb-1">{{ tools|length if tools else 0 }}</h3>
+                    <p class="text-muted mb-0">Всего инструментов</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <div class="metric-icon success mx-auto mb-2">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <h3 class="mb-1" id="activeToolsCount">
+                        {{ tools|selectattr("status", "equalto", "active")|list|length if tools else 0 }}
+                    </h3>
+                    <p class="text-muted mb-0">Активных</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <div class="metric-icon warning mx-auto mb-2">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <h3 class="mb-1">{{ tools_stats.total_calls if tools_stats else 0 }}</h3>
+                    <p class="text-muted mb-0">Всего вызовов</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <div class="metric-icon info mx-auto mb-2">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <h3 class="mb-1">{{ tools_stats.avg_response_time if tools_stats else 0 }}ms</h3>
+                    <p class="text-muted mb-0">Среднее время</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Список инструментов -->
+    <div class="row" id="toolsContainer">
+        {% if tools %}
+            {% for tool in tools %}
+            <div class="col-lg-4 col-md-6 mb-4 tool-item" 
+                 data-status="{{ tool.status if tool.status else 'inactive' }}" 
+                 data-category="{{ tool.category if tool.category else 'default' }}"
+                 data-name="{{ tool.name|lower }}">
+                <div class="card tool-card {{ tool.status if tool.status else 'inactive' }}" onclick="toggleToolDetails(this)">
+                    <div class="tool-status {{ tool.status if tool.status else 'inactive' }}"></div>
+                    
+                    <div class="card-body">
+                        <div class="d-flex align-items-start">
+                            <div class="tool-icon {{ tool.category if tool.category else 'default' }}">
+                                <i class="fas fa-{{ tool.icon if tool.icon else 'cog' }}"></i>
+                            </div>
+                            <div class="flex-grow-1 ms-3">
+                                <h5 class="card-title mb-1">{{ tool.name }}</h5>
+                                <p class="card-text text-muted small mb-2">{{ tool.description if tool.description else 'Описание не доступно' }}</p>
+                                
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="badge bg-{{ 'success' if tool.status == 'active' else 'danger' }}">
+                                        {{ 'Активен' if tool.status == 'active' else 'Неактивен' }}
+                                    </span>
+                                    <small class="text-muted">
+                                        {{ tool.calls_count if tool.calls_count else 0 }} вызовов
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Детальная информация (скрыта по умолчанию) -->
+                        <div class="tool-details">
+                            <div class="stats-grid">
+                                <div class="stat-item">
+                                    <div class="stat-value">{{ tool.calls_count if tool.calls_count else 0 }}</div>
+                                    <div class="stat-label">Вызовы</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-value">{{ tool.avg_time if tool.avg_time else 0 }}ms</div>
+                                    <div class="stat-label">Ср. время</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-value">{{ tool.success_rate if tool.success_rate else 100 }}%</div>
+                                    <div class="stat-label">Успешность</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-value">{{ tool.last_used if tool.last_used else 'Никогда' }}</div>
+                                    <div class="stat-label">Последний</div>
+                                </div>
+                            </div>
+                            
+                            {% if tool.parameters %}
+                            <div class="mt-3">
+                                <h6>Параметры:</h6>
+                                <div class="small text-muted">
+                                    {% for param in tool.parameters %}
+                                    <span class="badge bg-light text-dark me-1">{{ param }}</span>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            <div class="mt-3">
+                                <div class="btn-group w-100" role="group">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="testTool('{{ tool.name }}', event)">
+                                        <i class="fas fa-play me-1"></i> Тестировать
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="viewToolLogs('{{ tool.name }}', event)">
+                                        <i class="fas fa-file-alt me-1"></i> Логи
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-{{ 'danger' if tool.status == 'active' else 'success' }}" 
+                                            onclick="toggleTool('{{ tool.name }}', '{{ tool.status }}', event)">
+                                        <i class="fas fa-power-off me-1"></i>
+                                        {{ 'Отключить' if tool.status == 'active' else 'Включить' }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body text-center py-5">
+                        <i class="fas fa-tools fa-3x text-muted mb-3"></i>
+                        <h4 class="text-muted">Инструменты не найдены</h4>
+                        <p class="text-muted">Проверьте подключение к системе инструментов MCP</p>
+                        <button class="btn btn-primary" onclick="refreshTools()">
+                            <i class="fas fa-sync-alt me-2"></i>
+                            Обновить список
+                        </button>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Модальное окно тестирования инструмента -->
+<div class="modal fade" id="testToolModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-play me-2"></i>
+                    Тестирование инструмента: <span id="testToolName"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="testToolForm">
+                    <div id="toolParameters"></div>
+                    <div class="mt-3">
+                        <label class="form-label">Результат выполнения:</label>
+                        <pre id="testResult" class="bg-light p-3 border rounded" style="min-height: 100px; max-height: 300px; overflow-y: auto;">Нажмите "Выполнить" для тестирования</pre>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button type="button" class="btn btn-primary" onclick="executeTool()">
+                    <i class="fas fa-play me-2"></i>
+                    Выполнить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно логов инструмента -->
+<div class="modal fade" id="toolLogsModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-alt me-2"></i>
+                    Логи инструмента: <span id="logsToolName"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <select class="form-select" id="logLevel">
+                                <option value="">Все уровни</option>
+                                <option value="debug">Debug</option>
+                                <option value="info">Info</option>
+                                <option value="warning">Warning</option>
+                                <option value="error">Error</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <input type="number" class="form-control" id="logLimit" value="100" min="10" max="1000" placeholder="Лимит">
+                        </div>
+                        <div class="col-md-4">
+                            <input type="text" class="form-control" id="logSearch" placeholder="Поиск в логах...">
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-primary w-100" onclick="loadToolLogs()">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div id="toolLogsContainer" style="max-height: 400px; overflow-y: auto;">
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                        <p>Загрузка логов...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                <button type="button" class="btn btn-outline-primary" onclick="exportToolLogs()">
+                    <i class="fas fa-download me-2"></i>
+                    Экспорт
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentTool = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Инициализация фильтров
+    initFilters();
+    
+    // Автообновление каждые 30 секунд
+    setInterval(refreshToolsStats, 30000);
+});
+
+function initFilters() {
+    const searchInput = document.getElementById('toolSearch');
+    const statusFilter = document.getElementById('statusFilter');
+    const categoryFilter = document.getElementById('categoryFilter');
+    
+    [searchInput, statusFilter, categoryFilter].forEach(element => {
+        element.addEventListener('input', filterTools);
+    });
+}
+
+function filterTools() {
+    const searchTerm = document.getElementById('toolSearch').value.toLowerCase();
+    const statusFilter = document.getElementById('statusFilter').value;
+    const categoryFilter = document.getElementById('categoryFilter').value;
+    
+    const toolItems = document.querySelectorAll('.tool-item');
+    
+    toolItems.forEach(item => {
+        const name = item.dataset.name;
+        const status = item.dataset.status;
+        const category = item.dataset.category;
+        
+        const matchesSearch = !searchTerm || name.includes(searchTerm);
+        const matchesStatus = !statusFilter || status === statusFilter;
+        const matchesCategory = !categoryFilter || category === categoryFilter;
+        
+        if (matchesSearch && matchesStatus && matchesCategory) {
+            item.style.display = 'block';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+}
+
+function toggleToolDetails(card) {
+    // Закрываем все остальные карточки
+    document.querySelectorAll('.tool-card.expanded').forEach(c => {
+        if (c !== card) {
+            c.classList.remove('expanded');
+        }
+    });
+    
+    // Переключаем текущую карточку
+    card.classList.toggle('expanded');
+}
+
+async function refreshTools() {
+    try {
+        const button = event.target;
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Обновление...';
+        button.disabled = true;
+        
+        // Имитируем задержку для демонстрации
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Здесь будет AJAX запрос для обновления списка инструментов
+        window.location.reload();
+        
+    } catch (error) {
+        console.error('Ошибка обновления инструментов:', error);
+        adminPanel.showNotification('Ошибка обновления инструментов', 'danger');
+    }
+}
+
+async function refreshToolsStats() {
+    try {
+        const response = await fetch('/admin/api/tools-stats');
+        const data = await response.json();
+        
+        // Обновляем счетчики
+        document.getElementById('activeToolsCount').textContent = data.active_count;
+        
+    } catch (error) {
+        console.error('Ошибка обновления статистики:', error);
+    }
+}
+
+async function testTool(toolName, event) {
+    event.stopPropagation();
+    currentTool = toolName;
+    
+    try {
+        // Получаем информацию об инструменте
+        const response = await fetch(`/admin/api/tools/${toolName}/info`);
+        const toolInfo = await response.json();
+        
+        document.getElementById('testToolName').textContent = toolName;
+        
+        // Генерируем поля для параметров
+        const parametersContainer = document.getElementById('toolParameters');
+        parametersContainer.innerHTML = '';
+        
+        if (toolInfo.parameters && toolInfo.parameters.length > 0) {
+            toolInfo.parameters.forEach(param => {
+                const div = document.createElement('div');
+                div.className = 'mb-3';
+                div.innerHTML = `
+                    <label class="form-label">${param.name} ${param.required ? '*' : ''}</label>
+                    <input type="${param.type === 'number' ? 'number' : 'text'}" 
+                           class="form-control" 
+                           name="${param.name}" 
+                           placeholder="${param.description || ''}"
+                           ${param.required ? 'required' : ''}>
+                    <div class="form-text">${param.description || ''}</div>
+                `;
+                parametersContainer.appendChild(div);
+            });
+        } else {
+            parametersContainer.innerHTML = '<p class="text-muted">Этот инструмент не требует параметров</p>';
+        }
+        
+        // Очищаем результат
+        document.getElementById('testResult').textContent = 'Нажмите "Выполнить" для тестирования';
+        
+        // Показываем модальное окно
+        new bootstrap.Modal(document.getElementById('testToolModal')).show();
+        
+    } catch (error) {
+        console.error('Ошибка получения информации об инструменте:', error);
+        adminPanel.showNotification('Ошибка получения информации об инструменте', 'danger');
+    }
+}
+
+async function executeTool() {
+    if (!currentTool) return;
+    
+    const form = document.getElementById('testToolForm');
+    const formData = new FormData(form);
+    const params = {};
+    
+    // Собираем параметры
+    for (let [key, value] of formData.entries()) {
+        params[key] = value;
+    }
+    
+    const resultElement = document.getElementById('testResult');
+    resultElement.textContent = 'Выполнение...';
+    
+    try {
+        const response = await fetch(`/admin/api/tools/${currentTool}/execute`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(params)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            resultElement.textContent = JSON.stringify(result.data, null, 2);
+            resultElement.className = 'bg-light p-3 border rounded text-success';
+        } else {
+            resultElement.textContent = result.error || 'Ошибка выполнения';
+            resultElement.className = 'bg-light p-3 border rounded text-danger';
+        }
+        
+    } catch (error) {
+        resultElement.textContent = 'Ошибка: ' + error.message;
+        resultElement.className = 'bg-light p-3 border rounded text-danger';
+    }
+}
+
+async function toggleTool(toolName, currentStatus, event) {
+    event.stopPropagation();
+    
+    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+    const action = newStatus === 'active' ? 'включение' : 'отключение';
+    
+    if (!confirm(`Вы уверены что хотите выполнить ${action} инструмента "${toolName}"?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/admin/api/tools/${toolName}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ status: newStatus })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            adminPanel.showNotification(`Инструмент "${toolName}" успешно ${newStatus === 'active' ? 'включен' : 'отключен'}`, 'success');
+            
+            // Обновляем карточку
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            adminPanel.showNotification(result.error || 'Ошибка изменения статуса', 'danger');
+        }
+        
+    } catch (error) {
+        console.error('Ошибка изменения статуса:', error);
+        adminPanel.showNotification('Ошибка изменения статуса инструмента', 'danger');
+    }
+}
+
+async function viewToolLogs(toolName, event) {
+    event.stopPropagation();
+    currentTool = toolName;
+    
+    document.getElementById('logsToolName').textContent = toolName;
+    new bootstrap.Modal(document.getElementById('toolLogsModal')).show();
+    
+    loadToolLogs();
+}
+
+async function loadToolLogs() {
+    if (!currentTool) return;
+    
+    const level = document.getElementById('logLevel').value;
+    const limit = document.getElementById('logLimit').value;
+    const search = document.getElementById('logSearch').value;
+    
+    const container = document.getElementById('toolLogsContainer');
+    container.innerHTML = '<div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin fa-2x mb-3"></i><p>Загрузка логов...</p></div>';
+    
+    try {
+        const params = new URLSearchParams({
+            tool: currentTool,
+            level: level,
+            limit: limit,
+            search: search
+        });
+        
+        const response = await fetch(`/admin/api/tools/logs?${params}`);
+        const logs = await response.json();
+        
+        if (logs.length === 0) {
+            container.innerHTML = '<div class="text-center text-muted py-4"><i class="fas fa-inbox fa-2x mb-3"></i><p>Логи не найдены</p></div>';
+            return;
+        }
+        
+        container.innerHTML = logs.map(log => `
+            <div class="log-entry ${log.level} mb-2">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <span class="badge bg-${log.level === 'error' ? 'danger' : log.level === 'warning' ? 'warning' : 'info'} me-2">
+                            ${log.level.toUpperCase()}
+                        </span>
+                        <span class="log-message">${log.message}</span>
+                    </div>
+                    <small class="text-muted">${log.timestamp}</small>
+                </div>
+            </div>
+        `).join('');
+        
+    } catch (error) {
+        container.innerHTML = '<div class="alert alert-danger">Ошибка загрузки логов: ' + error.message + '</div>';
+    }
+}
+
+async function exportToolLogs() {
+    if (!currentTool) return;
+    
+    try {
+        const response = await fetch(`/admin/api/tools/${currentTool}/logs/export`);
+        const blob = await response.blob();
+        
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentTool}_logs_${new Date().toISOString().split('T')[0]}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        adminPanel.showNotification('Логи успешно экспортированы', 'success');
+    } catch (error) {
+        adminPanel.showNotification('Ошибка экспорта логов', 'danger');
+    }
+}
+</script>
+{% endblock %}

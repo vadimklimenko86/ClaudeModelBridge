@@ -1,0 +1,719 @@
+{% extends "admin/layout.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">{{ page_title }}</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshLogs()">
+                <i class="fas fa-sync-alt"></i> Обновить
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="exportLogs()">
+                <i class="fas fa-download"></i> Экспорт
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearLogs()">
+                <i class="fas fa-trash"></i> Очистить
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Фильтры -->
+<div class="card shadow mb-4">
+    <div class="card-header py-3">
+        <h6 class="m-0 font-weight-bold text-primary">Фильтры</h6>
+    </div>
+    <div class="card-body">
+        <form method="GET" id="filterForm" class="row g-3">
+            <div class="col-md-3">
+                <label for="level" class="form-label">Уровень логирования</label>
+                <select class="form-select" id="level" name="level">
+                    <option value="all" {% if current_level == 'all' %}selected{% endif %}>Все уровни</option>
+                    <option value="DEBUG" {% if current_level == 'DEBUG' %}selected{% endif %}>DEBUG</option>
+                    <option value="INFO" {% if current_level == 'INFO' %}selected{% endif %}>INFO</option>
+                    <option value="WARNING" {% if current_level == 'WARNING' %}selected{% endif %}>WARNING</option>
+                    <option value="ERROR" {% if current_level == 'ERROR' %}selected{% endif %}>ERROR</option>
+                    <option value="CRITICAL" {% if current_level == 'CRITICAL' %}selected{% endif %}>CRITICAL</option>
+                </select>
+            </div>
+            
+            <div class="col-md-3">
+                <label for="limit" class="form-label">Количество записей</label>
+                <select class="form-select" id="limit" name="limit">
+                    <option value="50" {% if current_limit == 50 %}selected{% endif %}>50</option>
+                    <option value="100" {% if current_limit == 100 %}selected{% endif %}>100</option>
+                    <option value="250" {% if current_limit == 250 %}selected{% endif %}>250</option>
+                    <option value="500" {% if current_limit == 500 %}selected{% endif %}>500</option>
+                    <option value="1000" {% if current_limit == 1000 %}selected{% endif %}>1000</option>
+                </select>
+            </div>
+            
+            <div class="col-md-4">
+                <label for="search" class="form-label">Поиск по тексту</label>
+                <input type="text" class="form-control" id="search" name="search" 
+                       value="{{ current_search }}" placeholder="Введите текст для поиска...">
+            </div>
+            
+            <div class="col-md-2">
+                <label class="form-label">&nbsp;</label>
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Применить
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Статистика логов -->
+<div class="row mb-4">
+    <div class="col-xl-2 col-md-4 mb-4">
+        <div class="card border-left-info shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">DEBUG</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="debugCount">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-bug fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-md-4 mb-4">
+        <div class="card border-left-primary shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">INFO</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="infoCount">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-info-circle fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-md-4 mb-4">
+        <div class="card border-left-warning shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">WARNING</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="warningCount">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-exclamation-triangle fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-md-4 mb-4">
+        <div class="card border-left-danger shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">ERROR</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="errorCount">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-times-circle fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-md-4 mb-4">
+        <div class="card border-left-dark shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-dark text-uppercase mb-1">CRITICAL</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="criticalCount">0</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-skull-crossbones fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-md-4 mb-4">
+        <div class="card border-left-success shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Всего</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalCount">{{ logs|length }}</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-list fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Логи -->
+<div class="card shadow mb-4">
+    <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+        <h6 class="m-0 font-weight-bold text-primary">
+            Записи логов 
+            <small class="text-muted">(показано {{ logs|length }} записей)</small>
+        </h6>
+        <div class="dropdown no-arrow">
+            <a class="dropdown-toggle" href="#" role="button" id="dropdownMenuLink" data-bs-toggle="dropdown">
+                <i class="fas fa-ellipsis-v fa-sm fa-fw text-gray-400"></i>
+            </a>
+            <div class="dropdown-menu dropdown-menu-right shadow animated--fade-in">
+                <div class="dropdown-header">Действия:</div>
+                <a class="dropdown-item" href="#" onclick="toggleAutoRefresh()">
+                    <i class="fas fa-sync fa-sm fa-fw mr-2 text-gray-400"></i>
+                    <span id="autoRefreshText">Включить авто-обновление</span>
+                </a>
+                <a class="dropdown-item" href="#" onclick="showLogAnalytics()">
+                    <i class="fas fa-chart-bar fa-sm fa-fw mr-2 text-gray-400"></i>
+                    Аналитика логов
+                </a>
+                <div class="dropdown-divider"></div>
+                <a class="dropdown-item" href="#" onclick="downloadLogsJson()">
+                    <i class="fas fa-download fa-sm fa-fw mr-2 text-gray-400"></i>
+                    Скачать JSON
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        {% if logs %}
+        <div class="log-container" id="logContainer">
+            {% for log in logs %}
+            <div class="log-entry log-{{ log.level.lower() }}" data-level="{{ log.level }}">
+                <div class="log-header">
+                    <span class="log-timestamp">{{ log.timestamp.strftime('%d.%m.%Y %H:%M:%S') }}</span>
+                    <span class="log-level badge badge-{{ log.level.lower() }}">{{ log.level }}</span>
+                    <span class="log-source">{{ log.logger_name or 'Unknown' }}</span>
+                    {% if log.context %}
+                    <span class="log-context">
+                        <i class="fas fa-info-circle" title="{{ log.context }}"></i>
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="log-message">
+                    {% if log.level in ['ERROR', 'CRITICAL'] and log.stack_trace %}
+                    <div class="log-error">
+                        <strong>{{ log.message }}</strong>
+                        <details class="mt-2">
+                            <summary>Stack Trace</summary>
+                            <pre class="stack-trace">{{ log.stack_trace }}</pre>
+                        </details>
+                    </div>
+                    {% else %}
+                    {{ log.message }}
+                    {% endif %}
+                </div>
+                {% if log.extra_data %}
+                <div class="log-extra">
+                    <details>
+                        <summary>Дополнительные данные</summary>
+                        <pre class="json-data">{{ log.extra_data | tojson(indent=2) }}</pre>
+                    </details>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+            <i class="fas fa-file-alt fa-3x text-gray-400 mb-3"></i>
+            <p class="text-muted">Логи не найдены с текущими фильтрами</p>
+            <button class="btn btn-outline-primary" onclick="clearFilters()">
+                Сбросить фильтры
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Модальное окно аналитики логов -->
+<div class="modal fade" id="logAnalyticsModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-xl" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Аналитика логов</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <canvas id="logsDistributionChart"></canvas>
+                    </div>
+                    <div class="col-md-6">
+                        <canvas id="logsTimelineChart"></canvas>
+                    </div>
+                </div>
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <h6>Топ ошибок</h6>
+                        <div id="topErrorsTable"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let autoRefreshInterval = null;
+let isAutoRefreshEnabled = false;
+
+// Обновление логов
+function refreshLogs() {
+    showSpinner();
+    location.reload();
+}
+
+// Экспорт логов
+async function exportLogs() {
+    try {
+        const params = new URLSearchParams({
+            level: document.getElementById('level').value,
+            limit: document.getElementById('limit').value,
+            search: document.getElementById('search').value,
+            format: 'csv'
+        });
+        
+        const response = await fetch(`/admin/api/logs/export?${params}`, {
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+        
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `logs_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            showAlert('Экспорт завершен', 'success');
+        } else {
+            const result = await response.json();
+            showAlert(result.error || 'Ошибка экспорта', 'danger');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showAlert('Произошла ошибка при экспорте', 'danger');
+    }
+}
+
+// Очистка логов
+async function clearLogs() {
+    const result = prompt('Введите количество дней для сохранения логов (0 = удалить все):', '7');
+    if (result === null) return;
+    
+    const days = parseInt(result);
+    if (isNaN(days) || days < 0) {
+        showAlert('Введите корректное число дней', 'warning');
+        return;
+    }
+    
+    if (!confirm(`Удалить логи старше ${days} дней? Это действие нельзя отменить.`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/admin/api/logs/clear', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify({ keep_days: days })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showAlert(`Удалено записей: ${result.deleted_count}`, 'success');
+            refreshLogs();
+        } else {
+            showAlert(result.error || 'Ошибка очистки', 'danger');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showAlert('Произошла ошибка при очистке', 'danger');
+    }
+}
+
+// Сброс фильтров
+function clearFilters() {
+    document.getElementById('level').value = 'all';
+    document.getElementById('limit').value = '100';
+    document.getElementById('search').value = '';
+    document.getElementById('filterForm').submit();
+}
+
+// Авто-обновление
+function toggleAutoRefresh() {
+    if (isAutoRefreshEnabled) {
+        clearInterval(autoRefreshInterval);
+        isAutoRefreshEnabled = false;
+        document.getElementById('autoRefreshText').textContent = 'Включить авто-обновление';
+        showAlert('Авто-обновление отключено', 'info');
+    } else {
+        autoRefreshInterval = setInterval(refreshLogs, 30000); // 30 секунд
+        isAutoRefreshEnabled = true;
+        document.getElementById('autoRefreshText').textContent = 'Отключить авто-обновление';
+        showAlert('Авто-обновление включено (каждые 30 сек)', 'info');
+    }
+}
+
+// Скачивание JSON
+async function downloadLogsJson() {
+    try {
+        const params = new URLSearchParams({
+            level: document.getElementById('level').value,
+            limit: document.getElementById('limit').value,
+            search: document.getElementById('search').value,
+            format: 'json'
+        });
+        
+        const response = await fetch(`/admin/api/logs/export?${params}`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `logs_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            showAlert('JSON файл сохранен', 'success');
+        } else {
+            showAlert('Ошибка загрузки данных', 'danger');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showAlert('Произошла ошибка при загрузке', 'danger');
+    }
+}
+
+// Аналитика логов
+async function showLogAnalytics() {
+    try {
+        const response = await fetch('/admin/api/logs/analytics');
+        const result = await response.json();
+        
+        if (result.success) {
+            // Отображаем модальное окно
+            const modal = new bootstrap.Modal(document.getElementById('logAnalyticsModal'));
+            modal.show();
+            
+            // Инициализируем графики после отображения модального окна
+            setTimeout(() => {
+                initLogAnalyticsCharts(result.data);
+            }, 500);
+        } else {
+            showAlert(result.error || 'Ошибка загрузки аналитики', 'danger');
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showAlert('Произошла ошибка при загрузке аналитики', 'danger');
+    }
+}
+
+// Инициализация графиков аналитики
+function initLogAnalyticsCharts(data) {
+    // График распределения по уровням
+    const distributionCtx = document.getElementById('logsDistributionChart').getContext('2d');
+    new Chart(distributionCtx, {
+        type: 'doughnut',
+        data: {
+            labels: data.distribution.labels,
+            datasets: [{
+                data: data.distribution.values,
+                backgroundColor: [
+                    '#17a2b8', // INFO
+                    '#ffc107', // WARNING  
+                    '#dc3545', // ERROR
+                    '#6c757d', // DEBUG
+                    '#343a40'  // CRITICAL
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Распределение по уровням'
+                }
+            }
+        }
+    });
+    
+    // График временной линии
+    const timelineCtx = document.getElementById('logsTimelineChart').getContext('2d');
+    new Chart(timelineCtx, {
+        type: 'line',
+        data: {
+            labels: data.timeline.labels,
+            datasets: [{
+                label: 'Количество логов',
+                data: data.timeline.values,
+                borderColor: 'rgb(75, 192, 192)',
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Активность логирования по времени'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+    
+    // Таблица топ ошибок
+    if (data.top_errors && data.top_errors.length > 0) {
+        const tableHtml = `
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Ошибка</th>
+                        <th>Количество</th>
+                        <th>Последнее появление</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${data.top_errors.map(error => `
+                        <tr>
+                            <td><code>${error.message}</code></td>
+                            <td><span class="badge badge-danger">${error.count}</span></td>
+                            <td>${formatDateTime(error.last_seen)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+        document.getElementById('topErrorsTable').innerHTML = tableHtml;
+    } else {
+        document.getElementById('topErrorsTable').innerHTML = '<p class="text-muted">Нет данных об ошибках</p>';
+    }
+}
+
+// Подсчет статистики по уровням при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    updateLogCounts();
+});
+
+function updateLogCounts() {
+    const logs = document.querySelectorAll('.log-entry');
+    const counts = {
+        debug: 0,
+        info: 0,
+        warning: 0,
+        error: 0,
+        critical: 0
+    };
+    
+    logs.forEach(log => {
+        const level = log.dataset.level.toLowerCase();
+        if (counts.hasOwnProperty(level)) {
+            counts[level]++;
+        }
+    });
+    
+    // Обновляем счетчики в интерфейсе
+    document.getElementById('debugCount').textContent = counts.debug;
+    document.getElementById('infoCount').textContent = counts.info;
+    document.getElementById('warningCount').textContent = counts.warning;
+    document.getElementById('errorCount').textContent = counts.error;
+    document.getElementById('criticalCount').textContent = counts.critical;
+    document.getElementById('totalCount').textContent = logs.length;
+}
+
+// Автоматическая прокрутка к последним логам
+function scrollToLatest() {
+    const container = document.getElementById('logContainer');
+    if (container && container.children.length > 0) {
+        container.children[0].scrollIntoView({ behavior: 'smooth' });
+    }
+}
+
+// Фильтрация логов в реальном времени
+document.getElementById('search').addEventListener('input', function(e) {
+    const searchTerm = e.target.value.toLowerCase();
+    const logs = document.querySelectorAll('.log-entry');
+    
+    logs.forEach(log => {
+        const message = log.querySelector('.log-message').textContent.toLowerCase();
+        const shouldShow = searchTerm === '' || message.includes(searchTerm);
+        log.style.display = shouldShow ? 'block' : 'none';
+    });
+});
+</script>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.log-container {
+    max-height: 600px;
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+}
+
+.log-entry {
+    padding: 12px;
+    border-bottom: 1px solid #eee;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+}
+
+.log-entry:last-child {
+    border-bottom: none;
+}
+
+.log-entry.log-debug {
+    background-color: #f8f9fa;
+    border-left: 4px solid #6c757d;
+}
+
+.log-entry.log-info {
+    background-color: #e7f3ff;
+    border-left: 4px solid #17a2b8;
+}
+
+.log-entry.log-warning {
+    background-color: #fff8e1;
+    border-left: 4px solid #ffc107;
+}
+
+.log-entry.log-error {
+    background-color: #ffe6e6;
+    border-left: 4px solid #dc3545;
+}
+
+.log-entry.log-critical {
+    background-color: #f8d7da;
+    border-left: 4px solid #721c24;
+}
+
+.log-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.log-timestamp {
+    color: #6c757d;
+    font-size: 12px;
+}
+
+.log-level {
+    font-size: 11px;
+    padding: 2px 6px;
+}
+
+.log-source {
+    color: #495057;
+    font-size: 12px;
+}
+
+.log-context {
+    color: #17a2b8;
+    cursor: help;
+}
+
+.log-message {
+    line-height: 1.4;
+    word-wrap: break-word;
+}
+
+.log-error strong {
+    color: #dc3545;
+}
+
+.log-extra {
+    margin-top: 8px;
+}
+
+.stack-trace, .json-data {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 11px;
+    max-height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+}
+
+.badge-debug {
+    background-color: #6c757d;
+}
+
+.badge-info {
+    background-color: #17a2b8;
+}
+
+.badge-warning {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.badge-error {
+    background-color: #dc3545;
+}
+
+.badge-critical {
+    background-color: #721c24;
+}
+
+.border-left-danger {
+    border-left: 0.25rem solid #dc3545 !important;
+}
+
+.border-left-dark {
+    border-left: 0.25rem solid #343a40 !important;
+}
+</style>
+{% endblock %}

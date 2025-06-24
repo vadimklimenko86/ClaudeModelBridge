@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="csrf-token" content="{{ request.cookies.get('csrf_token', '') }}">
+    <title>{% block title %}Админ-панель RemoteMCP{% endblock %}</title>
+    
+    <!-- CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="/admin/static/css/admin.css" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <style>
+        .sidebar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 250px;
+            z-index: 1000;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.8);
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin: 4px 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            background: rgba(255,255,255,0.15);
+            color: white;
+            transform: translateX(5px);
+        }
+        
+        .main-content {
+            margin-left: 250px;
+            background: #f8f9fa;
+            min-height: 100vh;
+        }
+        
+        .navbar {
+            background: white !important;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border: none;
+        }
+        
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            transition: transform 0.2s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            padding: 8px 20px;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .stats-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+        }
+        
+        .stats-card .card-body {
+            padding: 1.5rem;
+        }
+        
+        .alert {
+            border: none;
+            border-radius: 10px;
+        }
+        
+        .table {
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .badge {
+            border-radius: 20px;
+            padding: 6px 12px;
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+            }
+            
+            .sidebar.show {
+                transform: translateX(0);
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Боковая панель -->
+    <nav class="sidebar">
+        <div class="p-3">
+            <h4 class="text-white mb-4">
+                <i class="fas fa-cogs me-2"></i>
+                RemoteMCP
+            </h4>
+            
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link {% if request.url.path == '/admin/' %}active{% endif %}" href="/admin/">
+                        <i class="fas fa-tachometer-alt me-2"></i>
+                        Главная панель
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if '/admin/tools' in request.url.path %}active{% endif %}" href="/admin/tools">
+                        <i class="fas fa-tools me-2"></i>
+                        Инструменты
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if '/admin/users' in request.url.path %}active{% endif %}" href="/admin/users">
+                        <i class="fas fa-users me-2"></i>
+                        Пользователи
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if '/admin/monitoring' in request.url.path %}active{% endif %}" href="/admin/monitoring">
+                        <i class="fas fa-chart-line me-2"></i>
+                        Мониторинг
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if '/admin/logs' in request.url.path %}active{% endif %}" href="/admin/logs">
+                        <i class="fas fa-file-alt me-2"></i>
+                        Логи
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if '/admin/settings' in request.url.path %}active{% endif %}" href="/admin/settings">
+                        <i class="fas fa-cog me-2"></i>
+                        Настройки
+                    </a>
+                </li>
+            </ul>
+            
+            <hr class="my-4" style="border-color: rgba(255,255,255,0.2);">
+            
+            <div class="text-white-50 small">
+                <div><i class="fas fa-user me-2"></i>{{ user.username if user else 'Админ' }}</div>
+                <div class="mt-2">
+                    <i class="fas fa-clock me-2"></i>
+                    <span id="current-time"></span>
+                </div>
+            </div>
+        </div>
+    </nav>
+    
+    <!-- Основной контент -->
+    <div class="main-content">
+        <!-- Верхняя навигация -->
+        <nav class="navbar navbar-expand-lg navbar-light bg-white">
+            <div class="container-fluid">
+                <button class="btn btn-link d-md-none" type="button" id="sidebarToggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                
+                <h5 class="mb-0">{% block page_title %}Админ-панель{% endblock %}</h5>
+                
+                <div class="ms-auto">
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-user me-2"></i>{{ user.username if user else 'Админ' }}
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#changePasswordModal">
+                                <i class="fas fa-key me-2"></i>Сменить пароль
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <form method="post" action="/admin/logout" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+                                    <button type="submit" class="dropdown-item text-danger">
+                                        <i class="fas fa-sign-out-alt me-2"></i>Выйти
+                                    </button>
+                                </form>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </nav>
+        
+        <!-- Контент страницы -->
+        <div class="container-fluid p-4">
+            {% if error %}
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>{{ error }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endif %}
+            
+            {% if success %}
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="fas fa-check-circle me-2"></i>{{ success }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endif %}
+            
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+    
+    <!-- Модальное окно смены пароля -->
+    <div class="modal fade" id="changePasswordModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Смена пароля</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="changePasswordForm">
+                    <div class="modal-body">
+                        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token', '') }}">
+                        
+                        <div class="mb-3">
+                            <label for="current_password" class="form-label">Текущий пароль</label>
+                            <input type="password" class="form-control" id="current_password" name="current_password" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="new_password" class="form-label">Новый пароль</label>
+                            <input type="password" class="form-control" id="new_password" name="new_password" required>
+                            <div class="form-text">Минимум 8 символов</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="confirm_password" class="form-label">Подтвердите пароль</label>
+                            <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                        <button type="submit" class="btn btn-primary">Изменить пароль</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- JavaScript -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    
+    <script>
+        // Обновление времени
+        function updateTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('ru-RU');
+            const timeElement = document.getElementById('current-time');
+            if (timeElement) {
+                timeElement.textContent = timeString;
+            }
+        }
+        
+        setInterval(updateTime, 1000);
+        updateTime();
+        
+        // Мобильное меню
+        document.getElementById('sidebarToggle')?.addEventListener('click', function() {
+            document.querySelector('.sidebar').classList.toggle('show');
+        });
+        
+        // Смена пароля
+        document.getElementById('changePasswordForm')?.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            
+            try {
+                const response = await fetch('/admin/change-password', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('changePasswordModal')).hide();
+                    
+                    // Показываем уведомление об успехе
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = 'alert alert-success alert-dismissible fade show';
+                    alertDiv.innerHTML = `
+                        <i class="fas fa-check-circle me-2"></i>${result.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `;
+                    
+                    document.querySelector('.container-fluid').insertBefore(alertDiv, document.querySelector('.container-fluid').firstChild);
+                    
+                    // Очищаем форму
+                    this.reset();
+                } else {
+                    // Показываем ошибку
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'alert alert-danger mt-3';
+                    errorDiv.innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i>${result.error}`;
+                    
+                    const existingError = document.querySelector('#changePasswordModal .alert');
+                    if (existingError) {
+                        existingError.remove();
+                    }
+                    
+                    document.querySelector('#changePasswordModal .modal-body').appendChild(errorDiv);
+                }
+            } catch (error) {
+                console.error('Ошибка смены пароля:', error);
+            }
+        });
+        
+        // Закрытие алертов
+        document.addEventListener('click', function(e) {
+            if (e.target.matches('.btn-close')) {
+                const alert = e.target.closest('.alert');
+                if (alert) {
+                    alert.remove();
+                }
+            }
+        });
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
