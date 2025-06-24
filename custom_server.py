@@ -16,7 +16,7 @@ from http import HTTPStatus
 from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 
-from event_store import InMemoryEventStore
+from event_store import InMemoryEventStore, PersistentEventStore
 #from oauth2 import OAuth2Manager
 from oauth2_modules import OAuth2Manager
 
@@ -48,7 +48,8 @@ class CustomServerWithOauth2:
 		#   3. Переигрывать пропущенные события после переподключения
 		# Примечание: эта in-memory реализация только для демонстрации.
 		# В продакшене используйте постоянное хранилище (Redis, PostgreSQL и т.д.)
-		self.event_store = InMemoryEventStore()
+		#self.event_store = InMemoryEventStore()
+		self.event_store = PersistentEventStore()
 
 		# Создаем менеджер сессий
 		self.session_manager = StreamableHTTPSessionManager(
