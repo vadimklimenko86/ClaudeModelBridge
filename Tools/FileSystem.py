@@ -14,7 +14,7 @@ class FileSystemTools:
     def __init__(self, mcp: MCP_Tools) -> None:
         # Настройка часового пояса и рабочей директории
         self.tz_plus3 = datetime.timezone(datetime.timedelta(hours=3))
-        self.working_dir = "."
+        self.working_dir = "Data"#"."
         self.log_file = os.path.join("Tools", "filesystem.log")
 
         # Создание рабочей директории
