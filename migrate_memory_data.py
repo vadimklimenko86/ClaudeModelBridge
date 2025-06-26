@@ -105,7 +105,8 @@ def migrate_memory_data(sqlite_path: str):
         ensure_postgresql_table(pg_conn)
         
         # Читаем данные из SQLite
-        with sqlite_conn.cursor() as sqlite_cursor:
+        sqlite_cursor = sqlite_conn.cursor()
+        try:
             sqlite_cursor.execute("""
                 SELECT id, content, summary, importance, access_count, 
                        timestamp, embedding_json, metadata_json, content_hash
@@ -179,6 +180,9 @@ def migrate_memory_data(sqlite_path: str):
                 pg_cursor.execute("SELECT COUNT(*) FROM memories")
                 total_count = pg_cursor.fetchone()[0]
                 logger.info(f"Общее количество записей в PostgreSQL: {total_count}")
+        
+        finally:
+            sqlite_cursor.close()
     
     except Exception as e:
         logger.error(f"Ошибка во время миграции: {e}")
@@ -198,9 +202,12 @@ def verify_migration(sqlite_path: str):
     
     try:
         # Подсчет записей в SQLite
-        with sqlite_conn.cursor() as cursor:
-            cursor.execute("SELECT COUNT(*) FROM memories")
-            sqlite_count = cursor.fetchone()[0]
+        sqlite_cursor = sqlite_conn.cursor()
+        try:
+            sqlite_cursor.execute("SELECT COUNT(*) FROM memories")
+            sqlite_count = sqlite_cursor.fetchone()[0]
+        finally:
+            sqlite_cursor.close()
         
         # Подсчет записей в PostgreSQL
         with pg_conn.cursor() as cursor:
