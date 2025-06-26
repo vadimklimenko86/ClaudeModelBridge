@@ -27,7 +27,6 @@ class OAuth2Manager:
 		# Инициализируем базу данных если требуется
 		if self.use_database:
 			self.database = OAuth2Database(db_url, logger)
-			self.logger.info(f"OAuth2 database initialized at: {db_url}")
 		else:
 			self.database = None
 			self.logger.info("OAuth2 running in memory-only mode")

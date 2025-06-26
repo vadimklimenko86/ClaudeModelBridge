@@ -21,7 +21,9 @@ class OAuth2Database:
         if not self.db_url:
             raise ValueError("DATABASE_URL environment variable is required")
         self.logger = logger or logging.getLogger(__name__)
+        self.logger.info(f"OAuth2 database initializing at: {db_url}")
         self._init_database()
+        self.logger.info(f"OAuth2 database initialized")
 
     def _init_database(self):
         """Инициализация базы данных с созданием таблиц"""
@@ -302,8 +304,7 @@ class OAuth2Database:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT * FROM oauth2_users WHERE is_active = %s ORDER BY created_at DESC",
-                (True,)
-            )
+                (True, ))
             rows = cursor.fetchall()
 
             users = []
@@ -447,15 +448,16 @@ class OAuth2Database:
             return cursor.rowcount > 0
 
     # === Управление кодами авторизации ===
-    def save_authorization_code(self,
-                                code: str,
-                                user_id: str,
-                                client_id: str,
-                                scope: str,
-                                redirect_uri: str,
-                                expires_at: float,
-                                code_challenge: Optional[str] = None,
-                                code_challenge_method: Optional[str] = None) -> bool:
+    def save_authorization_code(
+            self,
+            code: str,
+            user_id: str,
+            client_id: str,
+            scope: str,
+            redirect_uri: str,
+            expires_at: float,
+            code_challenge: Optional[str] = None,
+            code_challenge_method: Optional[str] = None) -> bool:
         """Сохранение кода авторизации"""
         try:
             with self._get_connection() as conn:
@@ -584,7 +586,7 @@ class OAuth2Database:
             # Подсчет пользователей
             cursor.execute(
                 "SELECT COUNT(*) FROM oauth2_users WHERE is_active = %s",
-                (True,))
+                (True, ))
             active_users = cursor.fetchone()[0]
 
             # Подсчет активных access токенов
