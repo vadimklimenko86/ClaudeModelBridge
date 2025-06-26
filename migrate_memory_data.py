@@ -21,13 +21,120 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def connect_to_sqlite(db_path: str) -> sqlite3.Connection:
-    """Подключение к SQLite базе данных"""
+def check_sqlite_integrity(db_path: str) -> bool:
+    """Проверка целостности SQLite базы данных"""
     try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA integrity_check")
+            result = cursor.fetchone()[0]
+            if result == "ok":
+                logger.info("SQLite база данных в порядке")
+                return True
+            else:
+                logger.error(f"SQLite база данных повреждена: {result}")
+                return False
+    except Exception as e:
+        logger.error(f"Ошибка при проверке целостности SQLite: {e}")
+        return False
+
+
+def repair_sqlite_database(db_path: str) -> str:
+    """Попытка восстановления поврежденной SQLite базы данных"""
+    backup_path = f"{db_path}.backup"
+    repaired_path = f"{db_path}.repaired"
+    
+    try:
+        logger.info("Попытка восстановления SQLite базы данных...")
+        
+        # Создаем новую базу данных
+        with sqlite3.connect(repaired_path) as new_conn:
+            # Подключаемся к поврежденной базе
+            with sqlite3.connect(db_path) as old_conn:
+                old_conn.row_factory = sqlite3.Row
+                
+                # Пытаемся получить схему
+                try:
+                    cursor = old_conn.cursor()
+                    cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='memories'")
+                    schema = cursor.fetchone()
+                    
+                    if schema and schema[0]:
+                        # Создаем таблицу в новой базе
+                        new_conn.execute(schema[0])
+                        logger.info("Схема таблицы восстановлена")
+                        
+                        # Пытаемся скопировать данные построчно
+                        cursor.execute("SELECT * FROM memories")
+                        recovered_count = 0
+                        
+                        while True:
+                            try:
+                                rows = cursor.fetchmany(100)  # Читаем по 100 записей
+                                if not rows:
+                                    break
+                                
+                                for row in rows:
+                                    try:
+                                        new_conn.execute("""
+                                            INSERT INTO memories 
+                                            (id, content, summary, importance, access_count, timestamp, embedding_json, metadata_json, content_hash)
+                                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                        """, tuple(row))
+                                        recovered_count += 1
+                                    except Exception as row_error:
+                                        logger.warning(f"Не удалось восстановить строку {row[0] if row else 'unknown'}: {row_error}")
+                                        continue
+                                        
+                                new_conn.commit()
+                                
+                            except Exception as batch_error:
+                                logger.warning(f"Ошибка при чтении батча данных: {batch_error}")
+                                break
+                        
+                        logger.info(f"Восстановлено {recovered_count} записей")
+                        
+                        # Создаем индексы
+                        try:
+                            new_conn.execute("CREATE INDEX IF NOT EXISTS idx_importance ON memories(importance DESC)")
+                            new_conn.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON memories(timestamp DESC)")
+                            new_conn.execute("CREATE INDEX IF NOT EXISTS idx_content_hash ON memories(content_hash)")
+                            new_conn.commit()
+                            logger.info("Индексы восстановлены")
+                        except Exception as idx_error:
+                            logger.warning(f"Ошибка при создании индексов: {idx_error}")
+                        
+                        return repaired_path
+                        
+                except Exception as recovery_error:
+                    logger.error(f"Ошибка при восстановлении данных: {recovery_error}")
+                    return None
+                    
+    except Exception as e:
+        logger.error(f"Критическая ошибка при восстановлении базы: {e}")
+        return None
+
+
+def connect_to_sqlite(db_path: str) -> sqlite3.Connection:
+    """Подключение к SQLite базе данных с проверкой целостности"""
+    try:
+        # Сначала проверяем целостность
+        if not check_sqlite_integrity(db_path):
+            logger.warning("База данных повреждена, попытка восстановления...")
+            repaired_path = repair_sqlite_database(db_path)
+            
+            if repaired_path and check_sqlite_integrity(repaired_path):
+                logger.info(f"База данных восстановлена: {repaired_path}")
+                db_path = repaired_path
+            else:
+                logger.error("Не удалось восстановить базу данных")
+                raise Exception("SQLite база данных повреждена и не может быть восстановлена")
+        
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row  # Для доступа к колонкам по имени
         logger.info(f"Подключение к SQLite: {db_path}")
         return conn
+        
     except Exception as e:
         logger.error(f"Ошибка подключения к SQLite: {e}")
         raise
@@ -237,6 +344,19 @@ if __name__ == "__main__":
     if not os.path.exists(sqlite_file):
         logger.error(f"Файл {sqlite_file} не найден!")
         exit(1)
+    
+    # Показываем информацию о файле
+    file_size = os.path.getsize(sqlite_file)
+    logger.info(f"Размер файла базы данных: {file_size} bytes ({file_size/1024:.1f} KB)")
+    
+    # Создаем резервную копию
+    backup_file = f"{sqlite_file}.backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    try:
+        import shutil
+        shutil.copy2(sqlite_file, backup_file)
+        logger.info(f"Создана резервная копия: {backup_file}")
+    except Exception as backup_error:
+        logger.warning(f"Не удалось создать резервную копию: {backup_error}")
     
     try:
         logger.info("Начинаем миграцию данных из SQLite в PostgreSQL...")
