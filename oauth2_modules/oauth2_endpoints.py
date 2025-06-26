@@ -187,6 +187,8 @@ class OAuth2Endpoints:
 		    base_url,
 		    "authorization_endpoint":
 		    f"{base_url}/oauth/authorize",
+		    "registration_endpoint":
+		    f"{base_url}/oauth/register",
 		    "token_endpoint":
 		    f"{base_url}/oauth/token",
 		    "jwks_uri":
