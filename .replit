@@ -14,7 +14,7 @@ packages = [
 ]
 
 [deployment]
-deploymentTarget = "gce"
+deploymentTarget = "cloudrun"
 run = ["sh", "-c", "python main.py --port 5000 --log-level ERROR"]
 
 [workflows]
