@@ -1,21 +1,25 @@
-"""OAuth 2.0 Database management with SQLite"""
+"""OAuth 2.0 Database management with PostgreSQL"""
 
-import sqlite3
+import psycopg2
+import psycopg2.extras
 import time
 import json
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from contextlib import contextmanager
 
 
 class OAuth2Database:
-    """Класс для управления SQLite базой данных OAuth 2.0"""
+    """Класс для управления PostgreSQL базой данных OAuth 2.0"""
 
     def __init__(self,
-                 db_path: str = "oauth2.db",
-                 logger: logging.Logger = None):
-        self.db_path = db_path
+                 db_url: Optional[str] = None,
+                 logger: Optional[logging.Logger] = None):
+        self.db_url = db_url or os.environ.get("DATABASE_URL")
+        if not self.db_url:
+            raise ValueError("DATABASE_URL environment variable is required")
         self.logger = logger or logging.getLogger(__name__)
         self._init_database()
 
@@ -27,27 +31,27 @@ class OAuth2Database:
             # Таблица клиентов OAuth2
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS oauth2_clients (
-                    client_id TEXT PRIMARY KEY,
+                    client_id VARCHAR(255) PRIMARY KEY,
                     client_secret TEXT NOT NULL,
                     name TEXT NOT NULL,
                     redirect_uris TEXT NOT NULL,  -- JSON array
                     grant_types TEXT NOT NULL,    -- JSON array
                     scopes TEXT DEFAULT '[]',     -- JSON array
-                    created_at REAL NOT NULL,
-                    updated_at REAL NOT NULL
+                    created_at DOUBLE PRECISION NOT NULL,
+                    updated_at DOUBLE PRECISION NOT NULL
                 )
             """)
 
             # Таблица пользователей
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS oauth2_users (
-                    user_id TEXT PRIMARY KEY,
-                    email TEXT UNIQUE NOT NULL,
+                    user_id VARCHAR(255) PRIMARY KEY,
+                    email VARCHAR(255) UNIQUE NOT NULL,
                     name TEXT NOT NULL,
                     password_hash TEXT NOT NULL,
-                    is_active BOOLEAN DEFAULT 1,
-                    created_at REAL NOT NULL,
-                    updated_at REAL NOT NULL
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at DOUBLE PRECISION NOT NULL,
+                    updated_at DOUBLE PRECISION NOT NULL
                 )
             """)
 
@@ -55,13 +59,13 @@ class OAuth2Database:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS oauth2_access_tokens (
                     token TEXT PRIMARY KEY,
-                    user_id TEXT NOT NULL,
-                    client_id TEXT NOT NULL,
+                    user_id VARCHAR(255) NOT NULL,
+                    client_id VARCHAR(255) NOT NULL,
                     scope TEXT NOT NULL,
-                    token_type TEXT DEFAULT 'Bearer',
-                    expires_at REAL NOT NULL,
-                    created_at REAL NOT NULL,
-                    is_revoked BOOLEAN DEFAULT 0,
+                    token_type VARCHAR(50) DEFAULT 'Bearer',
+                    expires_at DOUBLE PRECISION NOT NULL,
+                    created_at DOUBLE PRECISION NOT NULL,
+                    is_revoked BOOLEAN DEFAULT FALSE,
                     FOREIGN KEY (user_id) REFERENCES oauth2_users (user_id),
                     FOREIGN KEY (client_id) REFERENCES oauth2_clients (client_id)
                 )
@@ -71,12 +75,12 @@ class OAuth2Database:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS oauth2_refresh_tokens (
                     token TEXT PRIMARY KEY,
-                    user_id TEXT NOT NULL,
-                    client_id TEXT NOT NULL,
+                    user_id VARCHAR(255) NOT NULL,
+                    client_id VARCHAR(255) NOT NULL,
                     scope TEXT NOT NULL,
-                    expires_at REAL NOT NULL,
-                    created_at REAL NOT NULL,
-                    is_revoked BOOLEAN DEFAULT 0,
+                    expires_at DOUBLE PRECISION NOT NULL,
+                    created_at DOUBLE PRECISION NOT NULL,
+                    is_revoked BOOLEAN DEFAULT FALSE,
                     FOREIGN KEY (user_id) REFERENCES oauth2_users (user_id),
                     FOREIGN KEY (client_id) REFERENCES oauth2_clients (client_id)
                 )
@@ -86,15 +90,15 @@ class OAuth2Database:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS oauth2_authorization_codes (
                     code TEXT PRIMARY KEY,
-                    user_id TEXT NOT NULL,
-                    client_id TEXT NOT NULL,
+                    user_id VARCHAR(255) NOT NULL,
+                    client_id VARCHAR(255) NOT NULL,
                     scope TEXT NOT NULL,
                     redirect_uri TEXT NOT NULL,
                     code_challenge TEXT,
-                    code_challenge_method TEXT,
-                    expires_at REAL NOT NULL,
-                    created_at REAL NOT NULL,
-                    is_used BOOLEAN DEFAULT 0,
+                    code_challenge_method VARCHAR(50),
+                    expires_at DOUBLE PRECISION NOT NULL,
+                    created_at DOUBLE PRECISION NOT NULL,
+                    is_used BOOLEAN DEFAULT FALSE,
                     FOREIGN KEY (user_id) REFERENCES oauth2_users (user_id),
                     FOREIGN KEY (client_id) REFERENCES oauth2_clients (client_id)
                 )
@@ -123,8 +127,8 @@ class OAuth2Database:
     @contextmanager
     def _get_connection(self):
         """Контекстный менеджер для работы с подключением к БД"""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row  # Для доступа к колонкам по имени
+        conn = psycopg2.connect(self.db_url)
+        conn.cursor_factory = psycopg2.extras.RealDictCursor  # Для доступа к колонкам по имени
         try:
             yield conn
         finally:
@@ -137,7 +141,7 @@ class OAuth2Database:
                       name: str,
                       redirect_uris: List[str],
                       grant_types: List[str],
-                      scopes: List[str] = None) -> bool:
+                      scopes: Optional[List[str]] = None) -> bool:
         """Создание нового OAuth2 клиента"""
         try:
             with self._get_connection() as conn:
@@ -148,7 +152,7 @@ class OAuth2Database:
                     """
                     INSERT INTO oauth2_clients 
                     (client_id, client_secret, name, redirect_uris, grant_types, scopes, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                     (client_id, client_secret, name, json.dumps(redirect_uris),
                      json.dumps(grant_types), json.dumps(scopes
@@ -157,7 +161,7 @@ class OAuth2Database:
                 self.logger.info(
                     f"Created OAuth2 client: {name} ({client_id})")
                 return True
-        except sqlite3.IntegrityError:
+        except psycopg2.IntegrityError:
             self.logger.error(f"Client {client_id} already exists")
             return False
 
@@ -165,7 +169,7 @@ class OAuth2Database:
         """Получение клиента по ID"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM oauth2_clients WHERE client_id = ?",
+            cursor.execute("SELECT * FROM oauth2_clients WHERE client_id = %s",
                            (client_id, ))
             row = cursor.fetchone()
 
@@ -216,7 +220,7 @@ class OAuth2Database:
         """Удаление клиента"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM oauth2_clients WHERE client_id = ?",
+            cursor.execute("DELETE FROM oauth2_clients WHERE client_id = %s",
                            (client_id, ))
             conn.commit()
 
@@ -238,12 +242,12 @@ class OAuth2Database:
                     """
                     INSERT INTO oauth2_users 
                     (user_id, email, name, password_hash, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                 """, (user_id, email, name, password_hash, now, now))
                 conn.commit()
                 self.logger.info(f"Created user: {user_id}")
                 return True
-        except sqlite3.IntegrityError:
+        except psycopg2.IntegrityError:
             self.logger.error(
                 f"User {user_id} or email {email} already exists")
             return False
@@ -253,8 +257,8 @@ class OAuth2Database:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT * FROM oauth2_users WHERE user_id = ? AND is_active = 1",
-                (user_id, ))
+                "SELECT * FROM oauth2_users WHERE user_id = %s AND is_active = %s",
+                (user_id, True))
             row = cursor.fetchone()
 
             if row:
@@ -275,8 +279,8 @@ class OAuth2Database:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT * FROM oauth2_users WHERE email = ? AND is_active = 1",
-                (email, ))
+                "SELECT * FROM oauth2_users WHERE email = %s AND is_active = %s",
+                (email, True))
             row = cursor.fetchone()
 
             if row:
@@ -297,7 +301,8 @@ class OAuth2Database:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT * FROM oauth2_users WHERE is_active = 1 ORDER BY created_at DESC"
+                "SELECT * FROM oauth2_users WHERE is_active = %s ORDER BY created_at DESC",
+                (True,)
             )
             rows = cursor.fetchall()
 
@@ -320,8 +325,8 @@ class OAuth2Database:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "UPDATE oauth2_users SET is_active = 0, updated_at = ? WHERE user_id = ?",
-                (time.time(), user_id))
+                "UPDATE oauth2_users SET is_active = %s, updated_at = %s WHERE user_id = %s",
+                (False, time.time(), user_id))
             conn.commit()
 
             if cursor.rowcount > 0:
@@ -345,12 +350,12 @@ class OAuth2Database:
                     """
                     INSERT INTO oauth2_access_tokens 
                     (token, user_id, client_id, scope, token_type, expires_at, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """, (token, user_id, client_id, scope, token_type, expires_at,
                       time.time()))
                 conn.commit()
                 return True
-        except sqlite3.IntegrityError:
+        except psycopg2.IntegrityError:
             self.logger.error(f"Access token already exists: {token[:10]}...")
             return False
 
@@ -361,8 +366,8 @@ class OAuth2Database:
             cursor.execute(
                 """
                 SELECT * FROM oauth2_access_tokens 
-                WHERE token = ? AND is_revoked = 0 AND expires_at > ?
-            """, (token, time.time()))
+                WHERE token = %s AND is_revoked = %s AND expires_at > %s
+            """, (token, False, time.time()))
             row = cursor.fetchone()
 
             if row:
@@ -383,8 +388,8 @@ class OAuth2Database:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "UPDATE oauth2_access_tokens SET is_revoked = 1 WHERE token = ?",
-                (token, ))
+                "UPDATE oauth2_access_tokens SET is_revoked = %s WHERE token = %s",
+                (True, token))
             conn.commit()
             return cursor.rowcount > 0
 
@@ -399,12 +404,12 @@ class OAuth2Database:
                     """
                     INSERT INTO oauth2_refresh_tokens 
                     (token, user_id, client_id, scope, expires_at, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                 """, (token, user_id, client_id, scope, expires_at,
                       time.time()))
                 conn.commit()
                 return True
-        except sqlite3.IntegrityError:
+        except psycopg2.IntegrityError:
             self.logger.error(f"Refresh token already exists: {token[:10]}...")
             return False
 
@@ -415,8 +420,8 @@ class OAuth2Database:
             cursor.execute(
                 """
                 SELECT * FROM oauth2_refresh_tokens 
-                WHERE token = ? AND is_revoked = 0 AND expires_at > ?
-            """, (token, time.time()))
+                WHERE token = %s AND is_revoked = %s AND expires_at > %s
+            """, (token, False, time.time()))
             row = cursor.fetchone()
 
             if row:
@@ -436,8 +441,8 @@ class OAuth2Database:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "UPDATE oauth2_refresh_tokens SET is_revoked = 1 WHERE token = ?",
-                (token, ))
+                "UPDATE oauth2_refresh_tokens SET is_revoked = %s WHERE token = %s",
+                (True, token))
             conn.commit()
             return cursor.rowcount > 0
 
@@ -449,8 +454,8 @@ class OAuth2Database:
                                 scope: str,
                                 redirect_uri: str,
                                 expires_at: float,
-                                code_challenge: str = None,
-                                code_challenge_method: str = None) -> bool:
+                                code_challenge: Optional[str] = None,
+                                code_challenge_method: Optional[str] = None) -> bool:
         """Сохранение кода авторизации"""
         try:
             with self._get_connection() as conn:
@@ -460,13 +465,13 @@ class OAuth2Database:
                     INSERT INTO oauth2_authorization_codes 
                     (code, user_id, client_id, scope, redirect_uri, code_challenge, 
                      code_challenge_method, expires_at, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (code, user_id, client_id, scope, redirect_uri,
                       code_challenge, code_challenge_method, expires_at,
                       time.time()))
                 conn.commit()
                 return True
-        except sqlite3.IntegrityError:
+        except psycopg2.IntegrityError:
             self.logger.error(
                 f"Authorization code already exists: {code[:10]}...")
             return False
@@ -478,8 +483,8 @@ class OAuth2Database:
             cursor.execute(
                 """
                 SELECT * FROM oauth2_authorization_codes 
-                WHERE code = ? AND is_used = 0 AND expires_at > ?
-            """, (code, time.time()))
+                WHERE code = %s AND is_used = %s AND expires_at > %s
+            """, (code, False, time.time()))
             row = cursor.fetchone()
 
             if row:
@@ -502,8 +507,8 @@ class OAuth2Database:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "UPDATE oauth2_authorization_codes SET is_used = 1 WHERE code = ?",
-                (code, ))
+                "UPDATE oauth2_authorization_codes SET is_used = %s WHERE code = %s",
+                (True, code))
             conn.commit()
             return cursor.rowcount > 0
 
@@ -515,14 +520,14 @@ class OAuth2Database:
 
             # Отзываем access токены
             cursor.execute(
-                "UPDATE oauth2_access_tokens SET is_revoked = 1 WHERE user_id = ? AND is_revoked = 0",
-                (user_id, ))
+                "UPDATE oauth2_access_tokens SET is_revoked = %s WHERE user_id = %s AND is_revoked = %s",
+                (True, user_id, False))
             access_count = cursor.rowcount
 
             # Отзываем refresh токены
             cursor.execute(
-                "UPDATE oauth2_refresh_tokens SET is_revoked = 1 WHERE user_id = ? AND is_revoked = 0",
-                (user_id, ))
+                "UPDATE oauth2_refresh_tokens SET is_revoked = %s WHERE user_id = %s AND is_revoked = %s",
+                (True, user_id, False))
             refresh_count = cursor.rowcount
 
             conn.commit()
@@ -542,19 +547,19 @@ class OAuth2Database:
 
             # Удаляем истекшие access токены
             cursor.execute(
-                "DELETE FROM oauth2_access_tokens WHERE expires_at <= ?",
+                "DELETE FROM oauth2_access_tokens WHERE expires_at <= %s",
                 (current_time, ))
             access_deleted = cursor.rowcount
 
             # Удаляем истекшие refresh токены
             cursor.execute(
-                "DELETE FROM oauth2_refresh_tokens WHERE expires_at <= ?",
+                "DELETE FROM oauth2_refresh_tokens WHERE expires_at <= %s",
                 (current_time, ))
             refresh_deleted = cursor.rowcount
 
             # Удаляем истекшие коды авторизации
             cursor.execute(
-                "DELETE FROM oauth2_authorization_codes WHERE expires_at <= ?",
+                "DELETE FROM oauth2_authorization_codes WHERE expires_at <= %s",
                 (current_time, ))
             codes_deleted = cursor.rowcount
 
@@ -578,25 +583,26 @@ class OAuth2Database:
 
             # Подсчет пользователей
             cursor.execute(
-                "SELECT COUNT(*) FROM oauth2_users WHERE is_active = 1")
+                "SELECT COUNT(*) FROM oauth2_users WHERE is_active = %s",
+                (True,))
             active_users = cursor.fetchone()[0]
 
             # Подсчет активных access токенов
             cursor.execute(
-                "SELECT COUNT(*) FROM oauth2_access_tokens WHERE is_revoked = 0 AND expires_at > ?",
-                (current_time, ))
+                "SELECT COUNT(*) FROM oauth2_access_tokens WHERE is_revoked = %s AND expires_at > %s",
+                (False, current_time))
             active_access_tokens = cursor.fetchone()[0]
 
             # Подсчет активных refresh токенов
             cursor.execute(
-                "SELECT COUNT(*) FROM oauth2_refresh_tokens WHERE is_revoked = 0 AND expires_at > ?",
-                (current_time, ))
+                "SELECT COUNT(*) FROM oauth2_refresh_tokens WHERE is_revoked = %s AND expires_at > %s",
+                (False, current_time))
             active_refresh_tokens = cursor.fetchone()[0]
 
             # Подсчет активных кодов авторизации
             cursor.execute(
-                "SELECT COUNT(*) FROM oauth2_authorization_codes WHERE is_used = 0 AND expires_at > ?",
-                (current_time, ))
+                "SELECT COUNT(*) FROM oauth2_authorization_codes WHERE is_used = %s AND expires_at > %s",
+                (False, current_time))
             active_auth_codes = cursor.fetchone()[0]
 
             return {
