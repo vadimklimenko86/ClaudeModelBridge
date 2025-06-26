@@ -15,7 +15,7 @@ packages = [
 
 [deployment]
 deploymentTarget = "gce"
-run = ["sh", "-c", "python main.py --port 5000"]
+run = ["sh", "-c", "python main.py --port 5000 --log-level ERROR"]
 
 [workflows]
 runButton = "Production Server"
