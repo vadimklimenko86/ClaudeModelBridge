@@ -2,7 +2,16 @@ modules = ["python-3.11", "postgresql-16", "python3"]
 
 [nix]
 channel = "stable-24_05"
-packages = ["cargo", "iana-etc", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc"]
+packages = [
+	"cargo",
+	"iana-etc",
+	"libiconv",
+	"libxcrypt",
+	"openssl",
+	"pkg-config",
+	"postgresql",
+	"rustc",
+]
 
 [deployment]
 deploymentTarget = "gce"
@@ -30,7 +39,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "gunicorn --bind 0.0.0.0:5000 --reuse-port --reload main:app"
+args = "python main.py --port 5000"
 waitForPort = 5000
 
 [[workflows.workflow]]
@@ -39,7 +48,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "uv add flask-socketio flask-cors requests"
+args = "pip install -r requirements.txt"
 
 [[workflows.workflow]]
 name = "Run"
@@ -75,7 +84,7 @@ author = 39922616
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pip install -r Data/requirements.txt"
+args = "pip install -r requirements.txt"
 
 [[ports]]
 localPort = 5000
