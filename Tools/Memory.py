@@ -10,7 +10,8 @@ import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Annotated, Any
 from pathlib import Path
-import sqlite3
+import psycopg2
+import psycopg2.extras
 import threading
 import hashlib
 
@@ -59,8 +60,10 @@ class MemoryNode:
 class MemorySystem:
     """Система рекурсивной памяти"""
 
-    def __init__(self, db_path: str = "InternalStorage/memory.db"):
-        self.db_path = db_path
+    def __init__(self, db_url: str = None):
+        self.db_url = db_url or os.environ.get("DATABASE_URL")
+        if not self.db_url:
+            raise ValueError("DATABASE_URL not found in environment variables")
         self.lock = threading.RLock()
         self.logger = logging.getLogger('MemorySystem')
         self._setup_database()
@@ -76,37 +79,41 @@ class MemorySystem:
                 self.logger.warning("OPENAI_API_KEY not found in environment")
 
     def _setup_database(self):
-        """Инициализация базы данных SQLite"""
-        os.makedirs(os.path.dirname(self.db_path)
-                    if os.path.dirname(self.db_path) else ".",
-                    exist_ok=True)
+        """Инициализация базы данных PostgreSQL"""
+        try:
+            with psycopg2.connect(self.db_url) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS memories (
+                            id SERIAL PRIMARY KEY,
+                            content TEXT NOT NULL,
+                            summary TEXT,
+                            importance REAL DEFAULT 1.0,
+                            access_count INTEGER DEFAULT 0,
+                            timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+                            embedding_json TEXT,
+                            metadata_json TEXT,
+                            content_hash TEXT UNIQUE
+                        )
+                    """)
 
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS memories (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    content TEXT NOT NULL,
-                    summary TEXT,
-                    importance REAL DEFAULT 1.0,
-                    access_count INTEGER DEFAULT 0,
-                    timestamp TEXT NOT NULL,
-                    embedding_json TEXT,
-                    metadata_json TEXT,
-                    content_hash TEXT UNIQUE
-                )
-            """)
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_importance ON memories(importance DESC)
+                    """)
 
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_importance ON memories(importance DESC)
-            """)
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_timestamp ON memories(timestamp DESC)
+                    """)
 
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_timestamp ON memories(timestamp DESC)
-            """)
-
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_content_hash ON memories(content_hash)
-            """)
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_content_hash ON memories(content_hash)
+                    """)
+                    
+                    conn.commit()
+                    self.logger.info("PostgreSQL database initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize PostgreSQL database: {e}")
+            raise
 
     def _get_embedding_sync(self, text: str) -> Optional[List[float]]:
         """Синхронная версия получения эмбеддинга"""
@@ -226,34 +233,37 @@ class MemorySystem:
 
         with self.lock:
             try:
-                with sqlite3.connect(self.db_path) as conn:
-                    cursor = conn.execute(
-                        """
-                        INSERT INTO memories (content, summary, importance, access_count, timestamp, embedding_json, metadata_json, content_hash)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                        (memory_node.content, memory_node.summary,
-                         memory_node.importance, memory_node.access_count,
-                         memory_node.timestamp.isoformat(),
-                         json.dumps(memory_node.embedding, ensure_ascii=False),
-                         json.dumps(memory_node.metadata,
-                                    ensure_ascii=False), content_hash))
-                    memory_id = cursor.lastrowid
+                with psycopg2.connect(self.db_url) as conn:
+                    with conn.cursor() as cursor:
+                        cursor.execute(
+                            """
+                            INSERT INTO memories (content, summary, importance, access_count, timestamp, embedding_json, metadata_json, content_hash)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+                        """,
+                            (memory_node.content, memory_node.summary,
+                             memory_node.importance, memory_node.access_count,
+                             memory_node.timestamp,
+                             json.dumps(memory_node.embedding, ensure_ascii=False),
+                             json.dumps(memory_node.metadata,
+                                        ensure_ascii=False), content_hash))
+                        memory_id = cursor.fetchone()[0]
+                        conn.commit()
 
                 self.logger.info(f"Memory added with ID: {memory_id}")
                 return memory_id
 
-            except sqlite3.IntegrityError:
+            except psycopg2.IntegrityError:
                 self.logger.warning(
                     f"Memory with this content already exists: {content[:50]}..."
                 )
                 # Возвращаем ID существующей записи
-                with sqlite3.connect(self.db_path) as conn:
-                    cursor = conn.execute(
-                        "SELECT id FROM memories WHERE content_hash = ?",
-                        (content_hash, ))
-                    result = cursor.fetchone()
-                    return result[0] if result else -1
+                with psycopg2.connect(self.db_url) as conn:
+                    with conn.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT id FROM memories WHERE content_hash = %s",
+                            (content_hash, ))
+                        result = cursor.fetchone()
+                        return result[0] if result else -1
 
     async def add_memory(self,
                          content: str,
@@ -279,58 +289,60 @@ class MemorySystem:
             return []
 
         with self.lock:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.execute("""
-                    SELECT id, content, summary, importance, access_count, timestamp, embedding_json, metadata_json
-                    FROM memories 
-                    ORDER BY importance DESC, timestamp DESC
-                """)
+            with psycopg2.connect(self.db_url) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        SELECT id, content, summary, importance, access_count, timestamp, embedding_json, metadata_json
+                        FROM memories 
+                        ORDER BY importance DESC, timestamp DESC
+                    """)
 
-                results = []
-                for row in cursor.fetchall():
-                    memory_id, content, summary, importance, access_count, timestamp, embedding_json, metadata_json = row
+                    results = []
+                    for row in cursor.fetchall():
+                        memory_id, content, summary, importance, access_count, timestamp, embedding_json, metadata_json = row
 
-                    try:
-                        embedding = json.loads(
-                            embedding_json) if embedding_json else []
-                        metadata = json.loads(
-                            metadata_json) if metadata_json else {}
+                        try:
+                            embedding = json.loads(
+                                embedding_json) if embedding_json else []
+                            metadata = json.loads(
+                                metadata_json) if metadata_json else {}
 
-                        if embedding:
-                            similarity = self._cosine_similarity(
-                                query_embedding, embedding)
+                            if embedding:
+                                similarity = self._cosine_similarity(
+                                    query_embedding, embedding)
 
-                            if similarity >= min_similarity:
-                                # Обновляем счетчик доступа и важность
-                                new_access_count = access_count + 1
-                                new_importance = importance * REINFORCEMENT_FACTOR
+                                if similarity >= min_similarity:
+                                    # Обновляем счетчик доступа и важность
+                                    new_access_count = access_count + 1
+                                    new_importance = importance * REINFORCEMENT_FACTOR
 
-                                conn.execute(
-                                    """
-                                    UPDATE memories 
-                                    SET access_count = ?, importance = ?
-                                    WHERE id = ?
-                                """, (new_access_count, new_importance,
-                                      memory_id))
+                                    cursor.execute(
+                                        """
+                                        UPDATE memories 
+                                        SET access_count = %s, importance = %s
+                                        WHERE id = %s
+                                    """, (new_access_count, new_importance,
+                                          memory_id))
 
-                                results.append({
-                                    'id': memory_id,
-                                    'content': content,
-                                    'summary': summary,
-                                    'importance': new_importance,
-                                    'access_count': new_access_count,
-                                    'timestamp': timestamp,
-                                    'similarity': similarity,
-                                    'metadata': metadata
-                                })
-                    except (json.JSONDecodeError, Exception) as e:
-                        self.logger.warning(
-                            f"Error processing memory {memory_id}: {e}")
-                        continue
+                                    results.append({
+                                        'id': memory_id,
+                                        'content': content,
+                                        'summary': summary,
+                                        'importance': new_importance,
+                                        'access_count': new_access_count,
+                                        'timestamp': timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp),
+                                        'similarity': similarity,
+                                        'metadata': metadata
+                                    })
+                        except (json.JSONDecodeError, Exception) as e:
+                            self.logger.warning(
+                                f"Error processing memory {memory_id}: {e}")
+                            continue
 
-                # Сортируем по схожести и ограничиваем результат
-                results.sort(key=lambda x: x['similarity'], reverse=True)
-                return results[:limit]
+                    conn.commit()
+                    # Сортируем по схожести и ограничиваем результат
+                    results.sort(key=lambda x: x['similarity'], reverse=True)
+                    return results[:limit]
 
     async def search_memories(
             self,
@@ -345,42 +357,43 @@ class MemorySystem:
     def get_all_memories_sync(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Синхронная версия получения всех воспоминаний"""
         with self.lock:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.execute(
-                    """
-                    SELECT id, content, summary, importance, access_count, timestamp, metadata_json
-                    FROM memories 
-                    ORDER BY importance DESC, timestamp DESC
-                    LIMIT ?
-                """, (limit, ))
+            with psycopg2.connect(self.db_url) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        SELECT id, content, summary, importance, access_count, timestamp, metadata_json
+                        FROM memories 
+                        ORDER BY importance DESC, timestamp DESC
+                        LIMIT %s
+                    """, (limit, ))
 
-                results = []
-                for row in cursor.fetchall():
-                    memory_id, content, summary, importance, access_count, timestamp, metadata_json = row
-                    try:
-                        metadata = json.loads(
-                            metadata_json) if metadata_json else {}
-                        results.append({
-                            'id': memory_id,
-                            'content': content,
-                            'summary': summary,
-                            'importance': importance,
-                            'access_count': access_count,
-                            'timestamp': timestamp,
-                            'metadata': metadata
-                        })
-                    except json.JSONDecodeError:
-                        results.append({
-                            'id': memory_id,
-                            'content': content,
-                            'summary': summary,
-                            'importance': importance,
-                            'access_count': access_count,
-                            'timestamp': timestamp,
-                            'metadata': {}
-                        })
+                    results = []
+                    for row in cursor.fetchall():
+                        memory_id, content, summary, importance, access_count, timestamp, metadata_json = row
+                        try:
+                            metadata = json.loads(
+                                metadata_json) if metadata_json else {}
+                            results.append({
+                                'id': memory_id,
+                                'content': content,
+                                'summary': summary,
+                                'importance': importance,
+                                'access_count': access_count,
+                                'timestamp': timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp),
+                                'metadata': metadata
+                            })
+                        except json.JSONDecodeError:
+                            results.append({
+                                'id': memory_id,
+                                'content': content,
+                                'summary': summary,
+                                'importance': importance,
+                                'access_count': access_count,
+                                'timestamp': timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp),
+                                'metadata': {}
+                            })
 
-                return results
+                    return results
 
     async def get_all_memories(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Получение всех воспоминаний"""
@@ -389,18 +402,20 @@ class MemorySystem:
     def delete_memory_sync(self, memory_id: int) -> bool:
         """Синхронная версия удаления воспоминания"""
         with self.lock:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.execute("DELETE FROM memories WHERE id = ?",
-                                      (memory_id, ))
-                deleted = cursor.rowcount > 0
+            with psycopg2.connect(self.db_url) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("DELETE FROM memories WHERE id = %s",
+                                          (memory_id, ))
+                    deleted = cursor.rowcount > 0
+                    conn.commit()
 
-                if deleted:
-                    self.logger.info(f"Memory {memory_id} deleted")
-                else:
-                    self.logger.warning(
-                        f"Memory {memory_id} not found for deletion")
+                    if deleted:
+                        self.logger.info(f"Memory {memory_id} deleted")
+                    else:
+                        self.logger.warning(
+                            f"Memory {memory_id} not found for deletion")
 
-                return deleted
+                    return deleted
 
     async def delete_memory(self, memory_id: int) -> bool:
         """Удаление воспоминания по ID"""
@@ -414,35 +429,37 @@ class MemorySystem:
             datetime.timezone.utc) - datetime.timedelta(days=max_age_days)
 
         with self.lock:
-            with sqlite3.connect(self.db_path) as conn:
-                # Сначала применяем decay к старым воспоминаниям
-                conn.execute(
-                    """
-                    UPDATE memories 
-                    SET importance = importance * ?
-                    WHERE timestamp < ?
-                """, (DECAY_FACTOR, cutoff_date.isoformat()))
-
-                # Удаляем самые неважные записи, если их слишком много
-                cursor = conn.execute("SELECT COUNT(*) FROM memories")
-                total_count = cursor.fetchone()[0]
-
-                deleted_count = 0
-                if total_count > max_count:
-                    delete_count = total_count - max_count
-                    conn.execute(
+            with psycopg2.connect(self.db_url) as conn:
+                with conn.cursor() as cursor:
+                    # Сначала применяем decay к старым воспоминаниям
+                    cursor.execute(
                         """
-                        DELETE FROM memories 
-                        WHERE id IN (
-                            SELECT id FROM memories 
-                            ORDER BY importance ASC, access_count ASC 
-                            LIMIT ?
-                        )
-                    """, (delete_count, ))
-                    deleted_count = conn.changes
+                        UPDATE memories 
+                        SET importance = importance * %s
+                        WHERE timestamp < %s
+                    """, (DECAY_FACTOR, cutoff_date))
 
-                self.logger.info(f"Cleaned up {deleted_count} old memories")
-                return deleted_count
+                    # Удаляем самые неважные записи, если их слишком много
+                    cursor.execute("SELECT COUNT(*) FROM memories")
+                    total_count = cursor.fetchone()[0]
+
+                    deleted_count = 0
+                    if total_count > max_count:
+                        delete_count = total_count - max_count
+                        cursor.execute(
+                            """
+                            DELETE FROM memories 
+                            WHERE id IN (
+                                SELECT id FROM memories 
+                                ORDER BY importance ASC, access_count ASC 
+                                LIMIT %s
+                            )
+                        """, (delete_count, ))
+                        deleted_count = cursor.rowcount
+                        
+                    conn.commit()
+                    self.logger.info(f"Cleaned up {deleted_count} old memories")
+                    return deleted_count
 
     async def cleanup_old_memories(self,
                                    max_age_days: int = 30,
