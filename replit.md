@@ -136,6 +136,7 @@ RemoteMCP - это реализация Model Context Protocol (MCP) серве�
 
 - June 26, 2025: Initial setup
 - June 26, 2025: Migrated OAuth2Database from SQLite to PostgreSQL - всё SQLite заменено на PostgreSQL в классе OAuth2Database для хранения клиентов, пользователей и токенов
+- June 26, 2025: Migrated MemorySystem from SQLite to PostgreSQL - полностью заменена SQLite база данных на PostgreSQL в классе MemorySystem для хранения воспоминаний, эмбеддингов и метаданных. Удален файл InternalStorage/memory.db
 
 ## User Preferences
 

@@ -753,30 +753,31 @@ class MemoryTools:
         def memory_stats() -> list[types.TextContent | types.ImageContent
                                    | types.EmbeddedResource]:
             try:
-                with sqlite3.connect(self.memory_system.db_path) as conn:
-                    # Общее количество воспоминаний
-                    cursor = conn.execute("SELECT COUNT(*) FROM memories")
-                    total_memories = cursor.fetchone()[0]
+                with psycopg2.connect(self.memory_system.db_url) as conn:
+                    with conn.cursor() as cursor:
+                        # Общее количество воспоминаний
+                        cursor.execute("SELECT COUNT(*) FROM memories")
+                        total_memories = cursor.fetchone()[0]
 
-                    # Топ-5 по важности
-                    cursor = conn.execute("""
-                        SELECT content, importance, access_count 
-                        FROM memories 
-                        ORDER BY importance DESC 
-                        LIMIT 5
-                    """)
-                    top_memories = cursor.fetchall()
+                        # Топ-5 по важности
+                        cursor.execute("""
+                            SELECT content, importance, access_count 
+                            FROM memories 
+                            ORDER BY importance DESC 
+                            LIMIT 5
+                        """)
+                        top_memories = cursor.fetchall()
 
-                    # Статистика по возрасту с проверкой на None
-                    cursor = conn.execute("""
-                        SELECT 
-                            COUNT(*) as count,
-                            AVG(importance) as avg_importance,
-                            AVG(access_count) as avg_access
-                        FROM memories 
-                        WHERE timestamp > datetime('now', '-7 days')
-                    """)
-                    recent_stats = cursor.fetchone()
+                        # Статистика по возрасту с проверкой на None
+                        cursor.execute("""
+                            SELECT 
+                                COUNT(*) as count,
+                                AVG(importance) as avg_importance,
+                                AVG(access_count) as avg_access
+                            FROM memories 
+                            WHERE timestamp > NOW() - INTERVAL '7 days'
+                        """)
+                        recent_stats = cursor.fetchone()
 
                 has_openai = "✅" if getattr(self.memory_system,
                                             'openai_client', None) else "❌"
@@ -798,7 +799,7 @@ class MemoryTools:
                 response += "🔧 **Состояние системы:**\n"
                 response += f"OpenAI API: {has_openai}\n"
                 response += f"NumPy: {has_numpy}\n"
-                response += f"База данных: {self.memory_system.db_path}\n\n"
+                response += f"База данных: PostgreSQL\n\n"
 
                 if top_memories:
                     response += "🔥 **Топ-5 важных воспоминаний:**\n"
