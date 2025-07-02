@@ -62,7 +62,11 @@ def main(port: int, log_level: str, json_response: bool, base_url: str) -> int:
 	from Tools.FileSystem import FileSystemTools
 	from Tools.Memory import MemoryTools
 
-	[SystemTools(tools), FileSystemTools(tools), MemoryTools(tools)]
+	[
+		#SystemTools(tools), 
+		#FileSystemTools(tools), 
+		MemoryTools(tools)
+	]
 
 	@mcp.call_tool()
 	async def call_tool(
