@@ -621,10 +621,10 @@ class MemoryTools:
                     response += f"📝 {memory.get('summary', 'Без описания')}\n"
 
                     content = memory.get('content', '')
-                    if len(content) > 200:
-                        response += f"💭 {content[:200]}...\n"
-                    else:
-                        response += f"💭 {content}\n"
+                    #if len(content) > 200:
+                    #    response += f"💭 {content[:200]}...\n"
+                    #else:
+                    response += f"💭 {content}\n"
 
                     if memory.get('metadata',
                                   {}) and memory['metadata'].get('tags'):
