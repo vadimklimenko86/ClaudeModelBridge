@@ -155,7 +155,8 @@ class CustomServerWithOauth2:
 		#token_data = self.oauth.token_manager.access_tokens[token]
 		token_data = validated_token[1]
 		import time
-		if token_data['expires_at'] < time.time():
+
+		if not token_data or token_data['expires_at'] < time.time():
 			self.logger.warning(f"Expired token: {token[:10]}...")
 
 			error_response = {
