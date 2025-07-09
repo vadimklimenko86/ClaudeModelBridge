@@ -159,4 +159,4 @@ def get_config(preset: str = "from_env") -> EventStoreConfig:
     errors = config.validate()
     if errors:
         raise ValueError(f"Некорректная конфигурация: {'; '.join(errors)}")
-        return config
+    return config
