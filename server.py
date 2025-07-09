@@ -46,7 +46,12 @@ logger.setLevel(logging.INFO)
     type=str,
     help="Base URL for the server",
 )
-def main(port: int, log_level: str, json_response: bool, base_url: str) -> int:
+@click.option(
+	"--debug",
+	is_flag=True,
+	default=False
+)
+def main(port: int, log_level: str, json_response: bool, base_url: str, debug: bool) -> int:
 	# Configure logging
 	logging.basicConfig(
 	    level=getattr(logging, log_level.upper()),
@@ -58,15 +63,24 @@ def main(port: int, log_level: str, json_response: bool, base_url: str) -> int:
 
 	tools = MCP_Tools(mcp)
 
+	# from Tools import 
+	
 	from Tools.System import SystemTools
 	from Tools.FileSystem import FileSystemTools
 	from Tools.Memory import MemoryTools
+	from Tools.Git import GitTools
 
-	[
-		#SystemTools(tools), 
-		#FileSystemTools(tools), 
+	if debug:
+		FileSystemTools(tools)
+		GitTools(tools)
+	else:
 		MemoryTools(tools)
-	]
+		
+	
+	#SystemTools(tools), 
+	#FileSystemTools(tools), 
+	#MemoryTools(tools)
+	
 
 	@mcp.call_tool()
 	async def call_tool(
