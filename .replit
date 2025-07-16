@@ -18,7 +18,7 @@ deploymentTarget = "gce"
 run = ["sh", "-c", "python main.py --port 5000 --log-level ERROR"]
 
 [workflows]
-runButton = "Production Server"
+runButton = "Development Server"
 
 [[workflows.workflow]]
 name = "Project"
@@ -66,7 +66,7 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python main.py --debug"
+args = "python main.py --debug --no_auth"
 
 [[workflows.workflow]]
 name = "Production Server"

@@ -19,7 +19,9 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from event_store import InMemoryEventStore
 from MCP_Tools import MCP_Tools
 import datetime
-from mcp.shared.context import RequestContext
+
+from settings import Settings
+
 #logger = logging.getLogger("u(vicorn")
 #logger.setLevel(logging.INFO)
 # Configure logging
@@ -46,25 +48,30 @@ logger.setLevel(logging.INFO)
     type=str,
     help="Base URL for the server",
 )
-@click.option(
-	"--debug",
-	is_flag=True,
-	default=False
-)
-def main(port: int, log_level: str, json_response: bool, base_url: str, debug: bool) -> int:
+@click.option("--debug", is_flag=True, default=False)
+@click.option("--no_auth", is_flag=True, default=False)
+def main(port: int, log_level: str, json_response: bool, base_url: str,
+         debug: bool, no_auth: bool) -> int:
 	# Configure logging
 	logging.basicConfig(
 	    level=getattr(logging, log_level.upper()),
 	    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 	)
-
-	mcp = Server("mcp-streamable-http-demo")
+	settings = Settings()
+	settings.port = port
+	settings.log_level = log_level
+	settings.json_response = json_response
+	settings.base_url = base_url
+	settings.debug = debug
+	settings.no_auth = no_auth
+	
+	mcp = Server("mcp-server")
 	tz_plus3 = datetime.timezone(datetime.timedelta(hours=3))
 
 	tools = MCP_Tools(mcp)
 
-	# from Tools import 
-	
+	# from Tools import
+
 	from Tools.System import SystemTools
 	from Tools.FileSystem import FileSystemTools
 	from Tools.Memory import MemoryTools
@@ -75,12 +82,6 @@ def main(port: int, log_level: str, json_response: bool, base_url: str, debug: b
 		GitTools(tools)
 	else:
 		MemoryTools(tools)
-		
-	
-	#SystemTools(tools), 
-	#FileSystemTools(tools), 
-	#MemoryTools(tools)
-	
 
 	@mcp.call_tool()
 	async def call_tool(
@@ -95,8 +96,10 @@ def main(port: int, log_level: str, json_response: bool, base_url: str, debug: b
 	async def list_tools() -> list[types.Tool]:
 		return tools.get_tools_list()
 
+	print(settings.__dict__)
+
 	from custom_server import CustomServerWithOauth2
-	routes = CustomServerWithOauth2(logger, mcp, base_url)
+	routes = CustomServerWithOauth2(logger, mcp, settings)
 
 	import uvicorn
 	logger.info(f"Starting server on host=0.0.0.0, port={port}")

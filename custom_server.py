@@ -19,6 +19,7 @@ from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from event_store import InMemoryEventStore, PersistentEventStore
 #from oauth2 import OAuth2Manager
 from oauth2_modules import OAuth2Manager
+from settings import Settings
 
 
 class SlashesMiddleware:
@@ -37,9 +38,10 @@ class SlashesMiddleware:
 class CustomServerWithOauth2:
 	"""Кастомный сервер MCP с поддержкой OAuth2"""
 
-	def __init__(self, logger: logging.Logger, serverapp: Server, base_url: str):
+	def __init__(self, logger: logging.Logger, serverapp: Server, settings: Settings):
 		self.logger = logger
 		self.serverapp = serverapp
+		self.settings = settings
 
 		# Создаем event store для поддержки возобновляемости потоков
 		# InMemoryEventStore позволяет клиентам:
@@ -54,9 +56,8 @@ class CustomServerWithOauth2:
 		# Создаем менеджер сессий
 		self.session_manager = StreamableHTTPSessionManager(
 		    app=serverapp, event_store=self.event_store, json_response=False)
-
-		# Инициализируем OAuth2 менеджер
-		self.oauth = OAuth2Manager(logger, issuer=base_url)
+		if not self.settings.no_auth:
+		 self.oauth = OAuth2Manager(logger, issuer=settings.base_url)
 
 		# Настраиваем маршруты
 		routes = [
@@ -77,9 +78,10 @@ class CustomServerWithOauth2:
 		# Создаем Starlette приложение
 		self.app = Starlette(debug=False, middleware=middleware, routes=routes)
 
-		# Добавляем OAuth2 маршруты
-		for route in self.oauth.routes:
-			self.app.router.routes.append(route)
+		if not self.settings.no_auth:
+		 # Добавляем OAuth2 маршруты
+		 for route in self.oauth.routes:
+			 self.app.router.routes.append(route)
 
 		self.logger.info("CustomServerWithOauth2 initialized successfully")
 
@@ -88,102 +90,106 @@ class CustomServerWithOauth2:
 		"""Обработчик для MCP streamable HTTP соединений"""
 		request = Request(scope, receive)
 
-		# Проверяем авторизацию
-		auth_header = request.headers.get('Authorization')
 
-		if not auth_header or not auth_header.startswith('Bearer '):
-			self.logger.warning(f"Unauthorized request to {scope['path']}")
-
-			# Возвращаем ошибку авторизации с указанием метаданных OAuth2
-			error_response = {
-			    "jsonrpc": "2.0",
-			    "error": {
-			        "code": -32001,
-			        "message": "Authentication required",
-			        "data": {
-			            "error": "invalid_token",
-			            "error_description": "Bearer token is missing or invalid"
-			        }
-			    }
-			}
-
-			# Формируем URL для метаданных
-			base_url = str(request.base_url).rstrip('/')
-			if request.headers.get('x-forwarded-host'):
-				proto = request.headers.get('x-forwarded-proto', 'https')
-				host = request.headers['x-forwarded-host']
-				base_url = f"{proto}://{host}"
-
-			response = Response(
-			    content=json.dumps(error_response),
-			    status_code=HTTPStatus.UNAUTHORIZED,
-			    headers={
-			        "WWW-Authenticate":
-			        f'Bearer realm="MCP API", resource_metadata="{base_url}/.well-known/oauth-protected-resource"',
-			        "Content-Type": "application/json"
-			    })
-			await response(scope, receive, send)
-			return
-
-		# Извлекаем токен
-		token = auth_header.split(' ', 1)[1]
-
-		# Проверяем токен через OAuth2 менеджер
-		if not self.oauth.token_manager.validate_access_token(token)[0]:
-			self.logger.warning(f"Invalid token: {token[:10]}...")
-
-			error_response = {
-			    "jsonrpc": "2.0",
-			    "error": {
-			        "code": -32001,
-			        "message": "Invalid token",
-			        "data": {
-			            "error": "invalid_token",
-			            "error_description": "The access token is invalid or expired"
-			        }
-			    }
-			}
-
-			response = Response(content=json.dumps(error_response),
-			                    status_code=HTTPStatus.UNAUTHORIZED,
-			                    headers={"Content-Type": "application/json"})
-			await response(scope, receive, send)
-			return
-
-		validated_token = self.oauth.token_manager.validate_access_token(token)
-		# Проверяем срок действия токена
-		#token_data = self.oauth.token_manager.access_tokens[token]
-		token_data = validated_token[1]
-		import time
-
-		if not token_data or token_data['expires_at'] < time.time():
-			self.logger.warning(f"Expired token: {token[:10]}...")
-
-			error_response = {
-			    "jsonrpc": "2.0",
-			    "error": {
-			        "code": -32001,
-			        "message": "Token expired",
-			        "data": {
-			            "error": "invalid_token",
-			            "error_description": "The access token has expired"
-			        }
-			    }
-			}
-
-			response = Response(content=json.dumps(error_response),
-			                    status_code=HTTPStatus.UNAUTHORIZED,
-			                    headers={"Content-Type": "application/json"})
-			await response(scope, receive, send)
-			return
-
-		# Токен валиден, передаем запрос в session manager
-		# Можно добавить user_id в scope для использования в обработчиках
-		scope['user_id'] = token_data['user_id']
-		scope['client_id'] = token_data['client_id']
-		scope['token_scopes'] = token_data['scope'].split()
-
-		await self.session_manager.handle_request(scope, receive, send)
+		if self.settings.no_auth:
+			await self.session_manager.handle_request(scope, receive, send)
+		else:
+			# Проверяем авторизацию
+			auth_header = request.headers.get('Authorization')
+	
+			if not auth_header or not auth_header.startswith('Bearer '):
+				self.logger.warning(f"Unauthorized request to {scope['path']}")
+	
+				# Возвращаем ошибку авторизации с указанием метаданных OAuth2
+				error_response = {
+				    "jsonrpc": "2.0",
+				    "error": {
+				        "code": -32001,
+				        "message": "Authentication required",
+				        "data": {
+				            "error": "invalid_token",
+				            "error_description": "Bearer token is missing or invalid"
+				        }
+				    }
+				}
+	
+				# Формируем URL для метаданных
+				base_url = str(request.base_url).rstrip('/')
+				if request.headers.get('x-forwarded-host'):
+					proto = request.headers.get('x-forwarded-proto', 'https')
+					host = request.headers['x-forwarded-host']
+					base_url = f"{proto}://{host}"
+	
+				response = Response(
+				    content=json.dumps(error_response),
+				    status_code=HTTPStatus.UNAUTHORIZED,
+				    headers={
+				        "WWW-Authenticate":
+				        f'Bearer realm="MCP API", resource_metadata="{base_url}/.well-known/oauth-protected-resource"',
+				        "Content-Type": "application/json"
+				    })
+				await response(scope, receive, send)
+				return
+	
+			# Извлекаем токен
+			token = auth_header.split(' ', 1)[1]
+	
+			# Проверяем токен через OAuth2 менеджер
+			if not self.oauth.token_manager.validate_access_token(token)[0]:
+				self.logger.warning(f"Invalid token: {token[:10]}...")
+	
+				error_response = {
+				    "jsonrpc": "2.0",
+				    "error": {
+				        "code": -32001,
+				        "message": "Invalid token",
+				        "data": {
+				            "error": "invalid_token",
+				            "error_description": "The access token is invalid or expired"
+				        }
+				    }
+				}
+	
+				response = Response(content=json.dumps(error_response),
+				                    status_code=HTTPStatus.UNAUTHORIZED,
+				                    headers={"Content-Type": "application/json"})
+				await response(scope, receive, send)
+				return
+	
+			validated_token = self.oauth.token_manager.validate_access_token(token)
+			# Проверяем срок действия токена
+			#token_data = self.oauth.token_manager.access_tokens[token]
+			token_data = validated_token[1]
+			import time
+	
+			if not token_data or token_data['expires_at'] < time.time():
+				self.logger.warning(f"Expired token: {token[:10]}...")
+	
+				error_response = {
+				    "jsonrpc": "2.0",
+				    "error": {
+				        "code": -32001,
+				        "message": "Token expired",
+				        "data": {
+				            "error": "invalid_token",
+				            "error_description": "The access token has expired"
+				        }
+				    }
+				}
+	
+				response = Response(content=json.dumps(error_response),
+				                    status_code=HTTPStatus.UNAUTHORIZED,
+				                    headers={"Content-Type": "application/json"})
+				await response(scope, receive, send)
+				return
+	
+			# Токен валиден, передаем запрос в session manager
+			# Можно добавить user_id в scope для использования в обработчиках
+			scope['user_id'] = token_data['user_id']
+			scope['client_id'] = token_data['client_id']
+			scope['token_scopes'] = token_data['scope'].split()
+	
+			await self.session_manager.handle_request(scope, receive, send)
 
 	async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
 		"""ASGI точка входа"""
