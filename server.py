@@ -64,7 +64,7 @@ def main(port: int, log_level: str, json_response: bool, base_url: str,
 	settings.base_url = base_url
 	settings.debug = debug
 	settings.no_auth = no_auth
-	
+
 	mcp = Server("mcp-server")
 	tz_plus3 = datetime.timezone(datetime.timedelta(hours=3))
 
@@ -80,6 +80,7 @@ def main(port: int, log_level: str, json_response: bool, base_url: str,
 	if debug:
 		FileSystemTools(tools)
 		GitTools(tools)
+		MemoryTools(tools)
 	else:
 		MemoryTools(tools)
 

@@ -31,8 +31,8 @@ except ImportError:
 
 # Константы для системы памяти
 MAX_DEPTH = 5
-#SIMILARITY_THRESHOLD = 0.7
-SIMILARITY_THRESHOLD = 0.2
+SIMILARITY_THRESHOLD = 0.7
+#SIMILARITY_THRESHOLD = 0.2
 DECAY_FACTOR = 0.99
 REINFORCEMENT_FACTOR = 1.1
 EMBEDDING_DIMENSION = 1536  # Для text-embedding-3-small
@@ -108,9 +108,10 @@ class MemorySystem:
                     cursor.execute("""
                         CREATE INDEX IF NOT EXISTS idx_content_hash ON memories(content_hash)
                     """)
-                    
+
                     conn.commit()
-                    self.logger.info("PostgreSQL database initialized successfully")
+                    self.logger.info(
+                        "PostgreSQL database initialized successfully")
         except Exception as e:
             self.logger.error(f"Failed to initialize PostgreSQL database: {e}")
             raise
@@ -239,13 +240,13 @@ class MemorySystem:
                             """
                             INSERT INTO memories (content, summary, importance, access_count, timestamp, embedding_json, metadata_json, content_hash)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
-                        """,
-                            (memory_node.content, memory_node.summary,
-                             memory_node.importance, memory_node.access_count,
-                             memory_node.timestamp,
-                             json.dumps(memory_node.embedding, ensure_ascii=False),
-                             json.dumps(memory_node.metadata,
-                                        ensure_ascii=False), content_hash))
+                        """, (memory_node.content, memory_node.summary,
+                              memory_node.importance, memory_node.access_count,
+                              memory_node.timestamp,
+                              json.dumps(memory_node.embedding,
+                                         ensure_ascii=False),
+                              json.dumps(memory_node.metadata,
+                                         ensure_ascii=False), content_hash))
                         memory_id = cursor.fetchone()[0]
                         conn.commit()
 
@@ -325,14 +326,24 @@ class MemorySystem:
                                           memory_id))
 
                                     results.append({
-                                        'id': memory_id,
-                                        'content': content,
-                                        'summary': summary,
-                                        'importance': new_importance,
-                                        'access_count': new_access_count,
-                                        'timestamp': timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp),
-                                        'similarity': similarity,
-                                        'metadata': metadata
+                                        'id':
+                                        memory_id,
+                                        'content':
+                                        content,
+                                        'summary':
+                                        summary,
+                                        'importance':
+                                        new_importance,
+                                        'access_count':
+                                        new_access_count,
+                                        'timestamp':
+                                        timestamp.isoformat() if hasattr(
+                                            timestamp, 'isoformat') else
+                                        str(timestamp),
+                                        'similarity':
+                                        similarity,
+                                        'metadata':
+                                        metadata
                                     })
                         except (json.JSONDecodeError, Exception) as e:
                             self.logger.warning(
@@ -374,22 +385,39 @@ class MemorySystem:
                             metadata = json.loads(
                                 metadata_json) if metadata_json else {}
                             results.append({
-                                'id': memory_id,
-                                'content': content,
-                                'summary': summary,
-                                'importance': importance,
-                                'access_count': access_count,
-                                'timestamp': timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp),
-                                'metadata': metadata
+                                'id':
+                                memory_id,
+                                'content':
+                                content,
+                                'summary':
+                                summary,
+                                'importance':
+                                importance,
+                                'access_count':
+                                access_count,
+                                'timestamp':
+                                timestamp.isoformat() if hasattr(
+                                    timestamp, 'isoformat') else
+                                str(timestamp),
+                                'metadata':
+                                metadata
                             })
                         except json.JSONDecodeError:
                             results.append({
-                                'id': memory_id,
-                                'content': content,
-                                'summary': summary,
-                                'importance': importance,
-                                'access_count': access_count,
-                                'timestamp': timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp),
+                                'id':
+                                memory_id,
+                                'content':
+                                content,
+                                'summary':
+                                summary,
+                                'importance':
+                                importance,
+                                'access_count':
+                                access_count,
+                                'timestamp':
+                                timestamp.isoformat() if hasattr(
+                                    timestamp, 'isoformat') else
+                                str(timestamp),
                                 'metadata': {}
                             })
 
@@ -405,7 +433,7 @@ class MemorySystem:
             with psycopg2.connect(self.db_url) as conn:
                 with conn.cursor() as cursor:
                     cursor.execute("DELETE FROM memories WHERE id = %s",
-                                          (memory_id, ))
+                                   (memory_id, ))
                     deleted = cursor.rowcount > 0
                     conn.commit()
 
@@ -456,9 +484,10 @@ class MemorySystem:
                             )
                         """, (delete_count, ))
                         deleted_count = cursor.rowcount
-                        
+
                     conn.commit()
-                    self.logger.info(f"Cleaned up {deleted_count} old memories")
+                    self.logger.info(
+                        f"Cleaned up {deleted_count} old memories")
                     return deleted_count
 
     async def cleanup_old_memories(self,
